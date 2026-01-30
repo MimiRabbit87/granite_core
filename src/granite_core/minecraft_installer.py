@@ -11,8 +11,8 @@ import typing
 import requests.adapters
 import urllib3
 
-import granite_settings
-import task_queue
+from . import granite_settings
+from . import task_queue
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s]%(message)s', encoding="utf-8")
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
@@ -23,7 +23,7 @@ class MinecraftInstaller:
         self.install_running_flag: bool = True
         self.settings = settings
         self.install_version: str = install_version
-        self.install_main_path: pathlib.Path = pathlib.Path("I:\\xixide\\PCL 2 Snapshot\\.minecraft")
+        self.install_main_path: pathlib.Path = settings.working_path
         self.download_source: str = download_source
         self.minecraft_version_manifest_path: dict[str, str] = {
             "Mojang": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
