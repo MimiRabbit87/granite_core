@@ -95,8 +95,7 @@ class MinecraftInstaller:
         os.makedirs(self.install_main_path / "versions" / self.install_version, exist_ok=True)
         with open(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.json", "w",
                   encoding="utf-8") as version_metadata_file:
-            json.dump(version_metadata, version_metadata_file, indent=2)  # type: ignore  # 不是 SupportWrite 到底是个什么玩意儿
-            # TextIO 不是能写嘛
+            json.dump(version_metadata, version_metadata_file, indent=2)
 
         self.version_metadata = version_metadata
         logging.info("[Installer]: 版本元数据下载完成")
@@ -201,7 +200,7 @@ class MinecraftInstaller:
                 with open(
                         self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json",
                         'w') as f:
-                    json.dump(asset_index, f, indent=2)  # type: ignore
+                    json.dump(asset_index, f, indent=2)
 
                 logging.info(f"[Installer]: 下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功")
 
@@ -577,7 +576,7 @@ class MinecraftInstaller:
             time.sleep(0.5)
 
     @staticmethod
-    def _print_progress_adaptive(description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> None:
+    def _print_progress(description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> None:
         last_progress = 0
         sleep_time = 0.5
 
