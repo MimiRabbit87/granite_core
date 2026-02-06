@@ -9,7 +9,7 @@ ENV/
 
 dist/
 build/
-*.egg-info/
+src/granite_core.egg-info/
 *.egg
 
 *.whl
