@@ -8,7 +8,7 @@ import pathlib
 class GraniteSettings:
     def __init__(self) -> None:
         settings: dict = {}
-        if os.path.exists("settings.json"):
+        if pathlib.Path.exists(pathlib.Path("settings.json")):
             with open("settings.json", "r") as file:
                 settings: dict = json.load(file)
 

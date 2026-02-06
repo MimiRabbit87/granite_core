@@ -108,10 +108,9 @@ class MinecraftInstaller:
             self.install_running_flag = False
             return -1
 
-        if os.path.isfile(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar"):
-            with open(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar",
-                      "rb") as f:
-                if hashlib.sha1(f.read()).hexdigest() == self.version_metadata["downloads"]["client"]["sha1"]:
+        if pathlib.Path.exists(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar"):
+                if (self._get_file_sha1(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar")
+                        == self.version_metadata["downloads"]["client"]["sha1"]):
                     logging.info("[Installer]: 已存在主文件")
                     return 0
 
@@ -163,26 +162,23 @@ class MinecraftInstaller:
             self.install_queue.shutdown()
             return False
 
-        with open(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar", "rb") as f:
-            # 校验散列值
-            if hashlib.sha1(f.read()).hexdigest() != self.version_metadata["downloads"]["client"]["sha1"]:
-                logging.info(
-                    f"[Installer]: 主文件散列值校验失败，已下载主文件散列值为 {hashlib.sha1(f.read()).hexdigest()}")
-                return -1
-            else:
-                logging.info("[Installer]: 版本主文件下载完成")
+        # 校验散列值
+        if (self._get_file_sha1(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar")
+                != self.version_metadata["downloads"]["client"]["sha1"]):
+            logging.info(
+                f"[Installer]: 主文件散列值校验失败，已下载主文件散列值为 {hashlib.sha1(f.read()).hexdigest()}")
+            return -1
 
+        logging.info("[Installer]: 版本主文件下载完成")
         return 0
 
     def download_game_asset_index(self) -> int:
         while True:
-            if os.path.isfile(
-                    self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json"):
-                with open(
-                        self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json",
-                        "rb"
-                ) as f:
-                    if hashlib.sha1(f.read()).hexdigest() == self.version_metadata["assetIndex"]["sha1"]:
+            if pathlib.Path.exists(
+                    self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json"
+            ):
+                    if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json")
+                            == self.version_metadata["assetIndex"]["sha1"]):
                         logging.info("[Installer]: 已有资源索引文件")
                         break
 
@@ -229,10 +225,11 @@ class MinecraftInstaller:
                 and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "pre-1.6" / assets_info[i][0])
             ):
                 if (
-                        hashlib.sha1(self.install_main_path / "assets" / "objects" / assets_info[i][1]["hash"][: 2] / assets_info[i][1]["hash"]) == assets_info[i][1]["hash"]
-                    and hashlib.sha1(self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0]) == assets_info[i][1]["hash"]
-                    and hashlib.sha1(self.install_main_path / "assets" / "virtual" / "pre-1.6" / assets_info[i][0]) == assets_info[i][1]["hash"]
+                        self._get_file_sha1(self.install_main_path / "assets" / "objects" / assets_info[i][1]["hash"][: 2] / assets_info[i][1]["hash"]) == assets_info[i][1]["hash"]
+                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0]) == assets_info[i][1]["hash"]
+                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual" / "pre-1.6" / assets_info[i][0]) == assets_info[i][1]["hash"]
                 ):
+                    self.installed_assets += 1
                     continue
 
             self.install_queue.add_task({
@@ -286,7 +283,8 @@ class MinecraftInstaller:
             if "classifiers" in self.version_metadata["libraries"][i]["downloads"]:
                 for classifier in self.version_metadata["libraries"][i]["downloads"]["classifiers"].values():
                     if pathlib.Path.exists(self.install_main_path / "libraries" / classifier["path"]):
-                        if hashlib.sha1(self.install_main_path / "libraries" / classifier["path"]) == classifier["sha1"]:
+                        if self._get_file_sha1(self.install_main_path / "libraries" / classifier["path"]) == classifier["sha1"]:
+                            self.installed_libraries += 1
                             continue
 
                     self.install_queue.add_task({
@@ -314,8 +312,9 @@ class MinecraftInstaller:
                     libraries_range += len(classifier)
             else:
                 if pathlib.Path.exists(self.install_main_path / "libraries" / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]):
-                    if (hashlib.sha1(self.install_main_path / "libraries" / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"])
+                    if (self._get_file_sha1(self.install_main_path / "libraries" / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"])
                             == self.version_metadata["libraries"][i]["downloads"]["artifact"]["sha1"]):
+                        self.installed_libraries += 1
                         continue
 
                 self.install_queue.add_task({
@@ -602,6 +601,9 @@ class MinecraftInstaller:
 
     @staticmethod
     def _print_progress(description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> None:
+        if total_progress == 0:
+            return
+
         last_progress = 0
         sleep_time = 0.5
 
@@ -617,3 +619,8 @@ class MinecraftInstaller:
                 last_progress = current
 
             time.sleep(sleep_time)
+
+    @staticmethod
+    def _get_file_sha1(file_path: pathlib.Path) -> str:
+        with open(file_path, 'rb') as f:
+            return hashlib.sha1(f.read()).hexdigest()
