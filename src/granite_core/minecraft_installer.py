@@ -15,11 +15,11 @@ from . import granite_settings
 from . import task_queue
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s]%(message)s', encoding="utf-8")
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
 
 
 class MinecraftInstaller:
     def __init__(self, settings: granite_settings.GraniteSettings, install_version: str, download_source: str) -> None:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
         self.install_running_flag: bool = True
         self.settings = settings
         self.install_version: str = install_version
@@ -38,9 +38,9 @@ class MinecraftInstaller:
         # 连接池啊这个是
         self.session = requests.Session()
         retry_strategy = urllib3.util.Retry(
-            total=5,
+            total=3,
             backoff_factor=0.5,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[403, 429, 500, 502, 503, 504, 567],
         )
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=self.settings.max_workers,  # 连接池大小
@@ -189,7 +189,7 @@ class MinecraftInstaller:
 
             try:
                 headers = {
-                    "User-Agent": "Mozilla/5.0"
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
                 }
                 asset_index: dict = json.loads(requests.request(
                     "GET",
@@ -259,7 +259,12 @@ class MinecraftInstaller:
         return 0
 
     def download_game_libraries(self) -> int:
-        self.total_libraries = len(self.version_metadata["libraries"])
+        self.total_libraries = 0
+        for lib in self.version_metadata["libraries"]:
+            if "classifiers" in lib["downloads"]:
+                self.total_libraries += len(lib["downloads"]["classifiers"])
+            else:
+                self.total_libraries += 1
         libraries_level: int = 0
         libraries_range: int = 0
         progress_updater: threading.Thread = threading.Thread(target=self._print_progress,
@@ -267,27 +272,8 @@ class MinecraftInstaller:
         progress_updater.start()
 
         for i in range(len(self.version_metadata["libraries"])):
-            self.install_queue.add_task({
-                "id": f"library-downloading-worker-{i}",
-                "description": f"下载游戏支持库文件的 ({self.version_metadata["libraries"][i]["name"]})",
-                "function": self._regular_download,
-                "args": (
-                    f"library-downloading-worker-{i}",  # 给个 id，debug 用
-                    f"{self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"] if self.download_source == "Mojang"
-                    else self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven")}",  # 远端地址
-                    [(self.install_main_path / "libraries" / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).parent],  # 下载资源文件路径
-                    [pathlib.Path(self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).name],  # 下载资源文件名
-                    self.version_metadata["libraries"][i]["downloads"]["artifact"]["sha1"]  # 散列值
-                ),  # 仍然是好长一条参数
-                "callback": self._library_downloading_callback,
-                "callback_args": (f"library-downloading-worker-{i}", self.version_metadata["libraries"][i]),
-                "max_retries": 3,
-                "priority": 11
-            })
-            libraries_range += 1
-
-            if "classifiers" in self.version_metadata["libraries"][i]:
-                for classifier in self.version_metadata["libraries"][i]["classifiers"].values():
+            if "classifiers" in self.version_metadata["libraries"][i]["downloads"]:
+                for classifier in self.version_metadata["libraries"][i]["downloads"]["classifiers"].values():
                     self.install_queue.add_task({
                         "id": f"library-downloading-worker-{i}",
                         "description": f"下载游戏支持库 ({self.version_metadata["libraries"][i]["name"]}) 的动态链接库文件 ({pathlib.Path(classifier['path']).name})",
@@ -310,6 +296,27 @@ class MinecraftInstaller:
                         "priority": 11
                     })
                     libraries_range += 1
+                continue
+
+            self.install_queue.add_task({
+                "id": f"library-downloading-worker-{i}",
+                "description": f"下载游戏支持库文件的 ({self.version_metadata["libraries"][i]["name"]})",
+                "function": self._regular_download,
+                "args": (
+                    f"library-downloading-worker-{i}",  # 给个 id，debug 用
+                    f"{self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"] if self.download_source == "Mojang"
+                    else self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven")}",  # 远端地址
+                    [(self.install_main_path / "libraries" / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).parent],  # 下载资源文件路径
+                    [pathlib.Path(self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).name],  # 下载资源文件名
+                    self.version_metadata["libraries"][i]["downloads"]["artifact"]["sha1"]  # 散列值
+                ),  # 仍然是好长一条参数
+                "callback": self._library_downloading_callback,
+                "callback_args": (f"library-downloading-worker-{i}", self.version_metadata["libraries"][i]),
+                "max_retries": 3,
+                "priority": 11
+            })
+            libraries_range += 1
+
             if libraries_range >= 100:
                 self._wait_for_batch_completion((libraries_level * 50 + 50) * 0.7)  # 来了噢
                 libraries_level += 1
@@ -383,7 +390,7 @@ class MinecraftInstaller:
     ) -> list:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
             }
             response: requests.Response = requests.head(url, headers=headers, allow_redirects=True)
 
@@ -409,7 +416,7 @@ class MinecraftInstaller:
                        start: int, end: int) -> bool:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                 "Range": f"bytes={start}-{end}"
             }
 
@@ -433,7 +440,7 @@ class MinecraftInstaller:
             return False
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
             }
 
             response = self.session.get(url, headers=headers, timeout=30, proxies={}, verify=False)
@@ -469,7 +476,6 @@ class MinecraftInstaller:
                 finish_install = False
                 break
 
-        logging.info(f"[Installer]: 主文件下载完成，是否成功：{finish_install}")
         return finish_install
 
     def _asset_downloading_callback(self, worker_id: str, asset_data: dict) -> int:
@@ -501,7 +507,7 @@ class MinecraftInstaller:
                     asset_data[1]["hash"]  # 散列值
                 ),  # 又是好长一条参数
                 "callback": self._asset_downloading_callback,
-                "callback_args": (f"asset-downloading-worker-{self.retried_assets}",),
+                "callback_args": (f"asset-downloading-worker-{self.retried_assets}", asset_data),
                 "max_retries": 3,
                 "priority": 12
             })
@@ -571,14 +577,19 @@ class MinecraftInstaller:
             time.sleep(0.5)
 
     @staticmethod
-    def _print_progress(description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> int:
+    def _print_progress_adaptive(description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> None:
+        last_progress = 0
+        sleep_time = 0.5
+
         while lazy_progress_getter() < total_progress:
-            logging.info(f"[Installer]: {description}：{lazy_progress_getter()} / {total_progress}")
-            time.sleep(2)
-        logging.info(f"[Installer]: {description}：{lazy_progress_getter()} / {total_progress} 完成")
-        return 0
+            current = lazy_progress_getter()
+            if current > last_progress:
+                if current - last_progress > 10:
+                    sleep_time = max(0.1, sleep_time * 0.8)
+                else:
+                    sleep_time = min(2.0, sleep_time * 1.2)
 
+                logging.info(f"{description}：{current} / {total_progress}")
+                last_progress = current
 
-if __name__ == "__main__":
-    inst = MinecraftInstaller(granite_settings.GraniteSettings(), "1.16.5", "BMCLAPI")
-    inst.install()
+            time.sleep(sleep_time)

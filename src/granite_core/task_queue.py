@@ -5,11 +5,13 @@
 import threading
 import heapq
 import time
+import traceback
 
 
 class TaskQueue:
     def __init__(self, max_workers: int) -> None:
         self.max_workers: int = max_workers
+        self.original_tasks = []
         self.tasks = []  # 最小堆，存储 (-priority, task_id, task)
         self.pending_tasks = []  # 也是一堆
         self.task_counter = 0
@@ -29,7 +31,7 @@ class TaskQueue:
         {
             "id": id,
             "description": description,
-            "function": function to be executed (Perhaps it's been deprecated),
+            "function": function to be executed,
             "args": args,
             "kwargs": kwargs,
             "callback": callback function,
@@ -58,6 +60,7 @@ class TaskQueue:
                 # 优先级默认为 0
                 priority = task.get("priority", 0)
                 heapq.heappush(self.tasks, (-priority, self.task_counter, task))
+                heapq.heappush(self.original_tasks, (-priority, self.task_counter, task))
                 self.task_counter += 1
                 self.condition.notify()
 
@@ -132,10 +135,10 @@ class TaskQueue:
                         with self.lock:
                             self.results[task["id"]] = result
                         break
-                    except Exception as e:
+                    except Exception:
                         if _ == task.get("max_retries", 0):
                             with self.lock:
-                                self.results[task["id"]] = f"Error: {str(e)}"
+                                self.results[task["id"]] = traceback.format_exc()
 
                 if task.get("max_retries", 0) != -1:  # 这个地方添柴（sb）设计有没有
                     break  # 不想动了
@@ -150,6 +153,8 @@ class TaskQueue:
     def shutdown(self) -> None:  # 停机
         self.stop_flag = True
         with self.lock:
+            self.tasks = []
+            self.runnable_tasks = {}
             self.condition.notify_all()
         for thread in self.thread_pool:
             thread.join()
@@ -157,6 +162,10 @@ class TaskQueue:
     def get_results(self) -> dict[str, any]:  # 拿结果
         with self.lock:
             return self.results.copy()
+
+    def get_original_tasks(self) -> list:
+        with self.lock:
+            return self.original_tasks.copy()
 
 
 if __name__ == "__main__":

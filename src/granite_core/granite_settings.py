@@ -13,10 +13,20 @@ class GraniteSettings:
                 settings: dict = json.load(file)
 
         self.current_version: str = getattr(settings, "current_version", None)  # 当前选择的 Minecraft 版本
-        self.working_path: pathlib.Path = getattr(settings, "working_path", pathlib.Path.cwd())
+        self.working_path: pathlib.Path = getattr(settings, "working_path", pathlib.Path.cwd() / ".minecraft")
         self.max_workers: int = getattr(settings, "max_workers", 128)  # 最大线程数
         self.temp_path: pathlib.Path = getattr(settings, "temp_path",
                                                pathlib.Path(os.environ.get("TEMP", pathlib.Path.cwd())) / "Granite" / "temp")  # 缓存路径
 
-    def set_setting(self, key: str, value: any) -> None:
+    def set(self, key: str, value) -> None:
         setattr(self, key, value)
+
+    def save(self) -> None:
+        settings: dict = {
+            "current_version": self.current_version,
+            "working_path": self.working_path,
+            "max_workers": self.max_workers,
+            "temp_path": self.temp_path,
+        }
+        with open("settings.json", "w") as file:
+            json.dump(settings, file)
