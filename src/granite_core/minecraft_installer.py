@@ -1,6 +1,6 @@
+from __future__ import annotations
 import hashlib
 import json
-import os
 import pathlib
 import logging
 import threading
@@ -11,20 +11,19 @@ import typing
 import requests.adapters
 import urllib3
 
-from . import granite_settings
 from . import task_queue
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s]%(message)s', encoding="utf-8")
 
 
 class MinecraftInstaller:
-    def __init__(self, settings: granite_settings.GraniteSettings, install_version: str, download_source: str) -> None:
+    def __init__(self, working_path: pathlib.Path, install_version: str, download_source: str, max_workers: int, temp_path: pathlib.Path) -> None:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
         self.install_running_flag: bool = True
-        self.settings = settings
         self.install_version: str = install_version
-        self.install_main_path: pathlib.Path = settings.working_path
+        self.install_main_path: pathlib.Path = working_path
         self.download_source: str = download_source
+        self.temp_path: pathlib.Path = temp_path
         self.minecraft_version_manifest_path: dict[str, str] = {
             "Mojang": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
             "BMCLAPI": "https://bmclapi2.bangbang93.com/mc/game/version_manifest.json"
@@ -43,13 +42,13 @@ class MinecraftInstaller:
             status_forcelist=[403, 429, 500, 502, 503, 504, 567],
         )
         adapter = requests.adapters.HTTPAdapter(
-            pool_connections=self.settings.max_workers,  # 连接池大小
-            pool_maxsize=self.settings.max_workers,
+            pool_connections=max_workers,  # 连接池大小
+            pool_maxsize=max_workers,
             max_retries=retry_strategy
         )
         self.session.mount("https://", adapter)
 
-        self.install_queue: task_queue.TaskQueue = task_queue.TaskQueue(self.settings.max_workers)
+        self.install_queue: task_queue.TaskQueue = task_queue.TaskQueue(max_workers)
         self.version_manifest: dict = {}
         self.version_metadata: dict = {}
         self.total_assets: int = 0
@@ -92,7 +91,7 @@ class MinecraftInstaller:
         if not version_metadata:
             return -1
 
-        os.makedirs(self.install_main_path / "versions" / self.install_version, exist_ok=True)
+        (self.install_main_path / "versions" / self.install_version).mkdir(parents=True, exist_ok=True)
         with open(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.json", "w",
                   encoding="utf-8") as version_metadata_file:
             json.dump(version_metadata, version_metadata_file, indent=2)
@@ -133,7 +132,7 @@ class MinecraftInstaller:
                     self.version_metadata["downloads"]["client"]["url"] if self.download_source == "Mojang"
                     else self.version_metadata["downloads"]["client"]["url"]
                     .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # 远端地址
-                    self.settings.temp_path / "downloads" /
+                    self.temp_path / "downloads" /
                     self.version_metadata["downloads"]["client"]["sha1"][: 2] /
                     self.version_metadata["downloads"]["client"]["sha1"],  # 下载块路径
                     f"{str(i)}.tmp",  # 下载块文件名
@@ -148,14 +147,14 @@ class MinecraftInstaller:
             with open(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar",
                       "wb+") as f:
                 for downloaded_chunk in range(len(file_chunked)):
-                    with open(self.settings.temp_path / "downloads" /
+                    with open(self.temp_path / "downloads" /
                               self.version_metadata["downloads"]["client"]["sha1"][: 2] /
                               self.version_metadata["downloads"]["client"]["sha1"] /
                               f"{str(downloaded_chunk)}.tmp", "rb") as tmp:
                         f.write(tmp.read())
             # 只是删个缓存，希望不要出什么 bug
             shutil.rmtree(
-                self.settings.temp_path / "downloads" / self.version_metadata["downloads"]["client"]["sha1"][: 2])
+                self.temp_path / "downloads" / self.version_metadata["downloads"]["client"]["sha1"][: 2])
         else:
             logging.info("[Installer]: 主文件下载失败，下载任务结束，等待其余线程完成执行，结果弃置")
             self.install_running_flag = False
@@ -175,9 +174,9 @@ class MinecraftInstaller:
     def download_game_asset_index(self) -> int:
         while True:
             if pathlib.Path.exists(
-                    self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json"
+                    self.install_main_path / "assets" / "indexes" / f'{self.version_metadata["assetIndex"]["id"]}.json'
             ):
-                    if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json")
+                    if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" / f'{self.version_metadata["assetIndex"]["id"]}.json')
                             == self.version_metadata["assetIndex"]["sha1"]):
                         logging.info("[Installer]: 已有资源索引文件")
                         break
@@ -192,13 +191,13 @@ class MinecraftInstaller:
                     else self.version_metadata["assetIndex"]["url"].replace("piston-meta.mojang.com",
                                                                             "bmclapi2.bangbang93.com"),
                     headers=headers, timeout=60).text)
-                os.makedirs(self.install_main_path / "assets" / "indexes", exist_ok=True)
+                (self.install_main_path / "assets" / "indexes").mkdir(parents=True, exist_ok=True)
                 with open(
-                        self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json",
+                        self.install_main_path / "assets" / "indexes" / f'{self.version_metadata["assetIndex"]["id"]}.json',
                         'w') as f:
                     json.dump(asset_index, f, indent=2)
 
-                logging.info(f"[Installer]: 下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功")
+                logging.info(f'[Installer]: 下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功')
 
             except Exception as e:
                 logging.error(f"[Installer]: 下载资源索引文件失败: {e}")
@@ -208,7 +207,7 @@ class MinecraftInstaller:
         return 0
 
     def download_game_assets(self) -> int:
-        with open(self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json") as f:
+        with open(self.install_main_path / "assets" / "indexes" / f'{self.version_metadata["assetIndex"]["id"]}.json') as f:
             asset_index: dict = json.load(f)
         assets_info: tuple = tuple(asset_index["objects"].items())
         self.total_assets = len(asset_index["objects"])
@@ -234,12 +233,12 @@ class MinecraftInstaller:
 
             self.install_queue.add_task({
                 "id": f"asset-downloading-worker-{i}",
-                "description": f"下载游戏资源文件的 ({assets_info[i][0]}, {assets_info[i][1]["hash"]})",
+                "description": f'下载游戏资源文件的 ({assets_info[i][0]}, {assets_info[i][1]["hash"]})',
                 "function": self._regular_download,
                 "args": (
                     f"asset-downloading-worker-{i}",  # 给个 id，debug 用
                     f"{self.minecraft_assets_path[self.download_source]}/"
-                    f"{assets_info[i][1]["hash"][: 2]}/{assets_info[i][1]["hash"]}",  # 远端地址
+                    f'{assets_info[i][1]["hash"][: 2]}/{assets_info[i][1]["hash"]}',  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / assets_info[i][1]["hash"][: 2],
                         (self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0]).parent,
@@ -289,13 +288,13 @@ class MinecraftInstaller:
 
                     self.install_queue.add_task({
                         "id": f"library-downloading-worker-{i}",
-                        "description": f"下载游戏支持库 ({self.version_metadata["libraries"][i]["name"]}) 的动态链接库文件 ({pathlib.Path(classifier['path']).name})",
+                        "description": f'下载游戏支持库 ({self.version_metadata["libraries"][i]["name"]}) 的动态链接库文件 ({pathlib.Path(classifier["path"]).name})',
                         "function": self._regular_download,
                         "args": (
                             f"library-downloading-worker-{i}",  # 给个 id，debug 用
                             # 远端地址
-                            f"{classifier["url"] if self.download_source == "Mojang"
-                            else classifier["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven")}",
+                            classifier["url"] if self.download_source == "Mojang"
+                            else classifier["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
                             # 下载支持库文件路径
                             [(self.install_main_path / "libraries" /
                               classifier["path"]).parent],
@@ -319,13 +318,13 @@ class MinecraftInstaller:
 
                 self.install_queue.add_task({
                     "id": f"library-downloading-worker-{i}",
-                    "description": f"下载游戏支持库文件的 ({self.version_metadata["libraries"][i]["name"]})",
+                    "description": f'下载游戏支持库文件的 ({self.version_metadata["libraries"][i]["name"]})',
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{i}",  # 给个 id，debug 用
                         # 远端地址
-                        f"{self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"] if self.download_source == "Mojang"
-                        else self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven")}",
+                        self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"] if self.download_source == "Mojang"
+                        else self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
                         # 下载支持库文件路径
                         [(self.install_main_path / "libraries" / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).parent],
                         # 下载支持库文件名
@@ -446,7 +445,7 @@ class MinecraftInstaller:
             response: requests.Response = requests.get(url, headers=headers, stream=True, timeout=60)
             response.raise_for_status()
 
-            os.makedirs(chunk_path, exist_ok=True)
+            chunk_path.mkdir(parents=True, exist_ok=True)
             with open(chunk_path / chunk_file, 'wb') as f:
                 for data in response.iter_content(chunk_size=8192):
                     f.write(data)
@@ -470,7 +469,7 @@ class MinecraftInstaller:
             response.raise_for_status()
 
             for i in range(len(store_path)):
-                os.makedirs(store_path[i], exist_ok=True)
+                store_path[i].mkdir(parents=True, exist_ok=True)
                 with open(store_path[i] / store_file[i], 'wb') as f:
                     f.write(response.content)
                 """if hashlib.sha1(response.content).hexdigest() != sha1:
@@ -511,12 +510,12 @@ class MinecraftInstaller:
 
             self._retry_download_game_resources({
                 "id": f"asset-downloading-worker-{self.retried_assets}",
-                "description": f"下载游戏资源文件的 ({asset_data[0]}, {asset_data[1]["hash"]})",
+                "description": f'下载游戏资源文件的 ({asset_data[0]}, {asset_data[1]["hash"]})',
                 "function": self._regular_download,
                 "args": (
                     f"asset-downloading-worker-{self.retried_assets}",  # 给个 id，debug 用
                     f"{self.minecraft_assets_path[self.download_source]}/"
-                    f"{asset_data[1]["hash"][: 2]}/{asset_data[1]["hash"]}",  # 远端地址
+                    f'{asset_data[1]["hash"][: 2]}/{asset_data[1]["hash"]}',  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / asset_data[1]["hash"][: 2],
                         (self.install_main_path / "assets" / "virtual" / "legacy" / asset_data[0]).parent,
@@ -551,16 +550,17 @@ class MinecraftInstaller:
             if is_classifier:
                 self._retry_download_game_resources({
                     "id": f"library-downloading-worker-retry-{self.retried_libraries}",
-                    "description": f"重试下载游戏支持库 ({library_data["name"]}) 的动态链接库文件 ({pathlib.Path(library_data['path']).name})",
+                    "description": f'重试下载游戏支持库 ({library_data["name"]}) 的动态链接库文件 ({pathlib.Path(library_data["path"]).name})',
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
-                        f"{library_data["url"] if self.download_source == "BMCLAPI"
-                        else library_data["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven")}",
                         # 远端地址
+                        library_data["url"] if self.download_source == "BMCLAPI"
+                        else library_data["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
+                        # 下载支持库文件路径
                         [(self.install_main_path / "libraries" / library_data["path"]).parent],
-                        # 下载资源文件路径
-                        [pathlib.Path(library_data["path"]).name],  # 下载资源文件名
+                        # 下载支持库文件名
+                        [pathlib.Path(library_data["path"]).name],
                         library_data["sha1"]  # 散列值
                     ),  # 好长一参数
                     "callback": self._library_downloading_callback,
@@ -571,12 +571,12 @@ class MinecraftInstaller:
             else:
                 self._retry_download_game_resources({
                     "id": f"library-downloading-worker-retry-{self.retried_libraries}",
-                    "description": f"重试下载游戏支持库文件的 ({library_data["name"]})",
+                    "description": f'重试下载游戏支持库文件的 ({library_data["name"]})',
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
-                        f"{library_data["downloads"]["artifact"]["url"] if self.download_source == "BMCLAPI"
-                        else library_data["downloads"]["artifact"]["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven")}",  # 远端地址
+                        library_data["downloads"]["artifact"]["url"] if self.download_source == "BMCLAPI"
+                        else library_data["downloads"]["artifact"]["url"].replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),  # 远端地址
                         [(self.install_main_path / "libraries" / library_data["downloads"]["artifact"]["path"]).parent],  # 下载资源文件路径
                         [pathlib.Path(library_data["downloads"]["artifact"]["path"]).name],  # 下载资源文件名
                         library_data["downloads"]["artifact"]["sha1"]  # 散列值
@@ -615,7 +615,7 @@ class MinecraftInstaller:
                 else:
                     sleep_time = min(2.0, sleep_time * 1.2)
 
-                logging.info(f"{description}：{current} / {total_progress}")
+                logging.info(f"[Installer]: {description}：{current} / {total_progress}")
                 last_progress = current
 
             time.sleep(sleep_time)

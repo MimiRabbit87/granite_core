@@ -2,6 +2,7 @@
     这个任务队列太好用了你知道吗
 """
 
+from __future__ import annotations
 import threading
 import heapq
 import time
