@@ -3,8 +3,10 @@
 """
 
 from __future__ import annotations
-import threading
+
+import copy
 import heapq
+import threading
 import time
 import traceback
 
@@ -20,13 +22,13 @@ class TaskQueue:
         self.thread_pool = [threading.Thread(target=self.run_runnable_task, args=(i,)) for i in range(max_workers)]
         self.stop_flag: bool = False
         self.lock: threading.Lock = threading.Lock()  # This is a lock
-        self.free_threads: list[int] = list(range(max_workers))
-        self.results: dict[str, any] = {}
+        self.idle_threads: list[int] = list(range(max_workers))
+        self.results: dict[str, ...] = {}
         self.condition = threading.Condition(self.lock)  # And this is a condition
         for t in self.thread_pool:
             t.start()
 
-    def add_task(self, task: dict[str, any]) -> None:
+    def add_task(self, task: dict[str, ...]) -> None:
         """
         Task format:
         {
@@ -66,17 +68,17 @@ class TaskQueue:
                 self.condition.notify()
 
     def run(self) -> None:
-        """主运行循环，将任务分配给空闲线程"""
+        """The main running loop, assigning tasks to idle threads"""
         pre_task_thread: threading.Thread = threading.Thread(target=self.check_pre_tasks)
         pre_task_thread.start()
 
         while not self.stop_flag:
             with self.lock:
-                if not self.free_threads or not self.tasks:
+                if not self.idle_threads or not self.tasks:
                     if (not self.tasks and
                             not self.runnable_tasks and
                             not self.pending_tasks and
-                            len(self.free_threads) == len(self.thread_pool)
+                            len(self.idle_threads) == len(self.thread_pool)
                     ):  # 究极 shutdown 条件
                         break
                     self.condition.wait(1)
@@ -85,12 +87,12 @@ class TaskQueue:
                 # 获取优先级最高的任务
                 if self.tasks:
                     _, _, task = heapq.heappop(self.tasks)
-                    if self.free_threads:
-                        thread_id = self.free_threads.pop(0)
+                    if self.idle_threads:
+                        thread_id = self.idle_threads.pop(0)
                         self.runnable_tasks[thread_id] = task
                         self.condition.notify_all()
 
-            # print(self.free_threads)  # 测试用的这玩意
+            # print(self.idle_threads)  # 测试用的这玩意
 
     def check_pre_tasks(self) -> None:
         ready_tasks = []
@@ -121,8 +123,8 @@ class TaskQueue:
         while not self.stop_flag:
             with self.lock:
                 if thread_id not in self.runnable_tasks:
-                    if thread_id not in self.free_threads:
-                        self.free_threads.append(thread_id)
+                    if thread_id not in self.idle_threads:
+                        self.idle_threads.append(thread_id)
                     self.condition.wait()
                     continue
 
@@ -136,10 +138,10 @@ class TaskQueue:
                         with self.lock:
                             self.results[task["id"]] = result
                         break
-                    except Exception:
+                    except Exception as e:
                         if _ == task.get("max_retries", 0):
                             with self.lock:
-                                self.results[task["id"]] = traceback.format_exc()
+                                self.results[task["id"]] = traceback.format_exception(Exception, e, e.__traceback__)
 
                 if task.get("max_retries", 0) != -1:  # 这个地方添柴（sb）设计有没有
                     break  # 不想动了
@@ -148,10 +150,11 @@ class TaskQueue:
                 task["callback"](*task.get("callback_args", ()), **task.get("callback_kwargs", {}))
 
             with self.lock:
-                self.free_threads.append(thread_id)
+                self.idle_threads.append(thread_id)
                 self.condition.notify()
 
-    def shutdown(self) -> None:  # 停机
+    def shutdown(self) -> None:
+        """Stop the task queue, clearing all tasks"""
         self.stop_flag = True
         with self.lock:
             self.tasks = []
@@ -160,13 +163,15 @@ class TaskQueue:
         for thread in self.thread_pool:
             thread.join()
 
-    def get_results(self) -> dict[str, any]:  # 拿结果
+    @property
+    def get_results(self) -> dict[str, ...]:
         with self.lock:
-            return self.results.copy()
+            return copy.deepcopy(self.results)
 
+    @property
     def get_original_tasks(self) -> list:
         with self.lock:
-            return self.original_tasks.copy()
+            return copy.deepcopy(self.original_tasks)
 
 
 if __name__ == "__main__":
@@ -238,5 +243,5 @@ if __name__ == "__main__":
     task_queue.shutdown()
 
     # 获取结果
-    results = task_queue.get_results()
+    results = task_queue.get_results
     print("任务结果:", results)

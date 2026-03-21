@@ -1,69 +1,50 @@
 from __future__ import annotations
-import zipfile
+import datetime
 import json
+import logging
 import pathlib
 import re
-import logging
 import shutil
-import datetime
+import zipfile
+
+from . import granite_settings
 
 
 class MinecraftLauncher:
     def __init__(
             self,
-            temp_path: pathlib.Path,
-            system_name: str,
-            system_version: str,
-            system_architecture: str,
-            working_path: pathlib.Path,
-            version: str,
-            jvm_argument_head: str,
-            is_demo_user: bool,
-            has_custom_resolution: bool,
-            has_quick_plays_support: bool,
-            is_quick_play_singleplayer: bool,
-            is_quick_play_multiplayer: bool,
-            is_quick_play_realms: bool,
-            maximum_heap_size: int,  # 单位：MB
-            initial_heap_size: int,  # 单位：MB
-            auth_player_name: str,
-            auth_uuid: str,
-            auth_access_token: str,
-            user_type: str,
-            quick_play_path: pathlib.Path | None = None,
-            quick_play_singleplayer: str = "",
-            quick_play_multiplayer: str = "",
-            quick_play_realms: str = "",
+            setting: granite_settings.GraniteSettings,
     ) -> None:
-        self.natives_directory: pathlib.Path = working_path / "versions" / version / f"{version}-natives"
+        self.natives_directory: pathlib.Path = (setting.working_path / "versions" / setting.current_version /
+                                                f"{setting.current_version}-natives")
         self.launcher_name: str = "Granite"
         self.launcher_version: str = "114514"
         self.classpath: str = ""
 
-        self.temp_path: pathlib.Path = temp_path
-        self.system_name: str = system_name
-        self.system_version: str = system_version
-        self.system_architecture: str = system_architecture
-        self.working_path: pathlib.Path = working_path
-        self.version: str = version
-        self.jvm_argument_head: str = jvm_argument_head
-        self.is_demo_user: bool = is_demo_user
-        self.has_custom_resolution: bool = has_custom_resolution
-        self.has_quick_plays_support: bool = has_quick_plays_support
-        self.is_quick_play_singleplayer: bool = is_quick_play_singleplayer
-        self.is_quick_play_multiplayer: bool = is_quick_play_multiplayer
-        self.is_quick_play_realms: bool = is_quick_play_realms
-        self.maximum_heap_size: int = maximum_heap_size
-        self.initial_heap_size: int = initial_heap_size
-        self.auth_player_name: str = auth_player_name
-        self.auth_uuid: str = auth_uuid
-        self.auth_access_token: str = auth_access_token
-        self.user_type: str = user_type
-        self.quick_play_path: pathlib.Path = quick_play_path if quick_play_path is not None \
-            else working_path / "quickPlay" / "log.json"
-        self.quick_play_singleplayer: str = quick_play_singleplayer
-        self.quick_play_multiplayer: str = quick_play_multiplayer
-        self.quick_play_realms: str = quick_play_realms
+        self.temp_path: pathlib.Path = setting.temp_path
+        self.system_name: str = setting.system_name
+        self.system_version: str = setting.system_version
+        self.system_architecture: str = setting.system_architecture
+        self.working_path: pathlib.Path = setting.working_path
+        self.version: str = setting.current_version
+        self.jvm_argument_head: str = setting.jvm_argument_head
+        self.is_demo_user: bool = setting.is_demo_user
+        self.has_custom_resolution: bool = setting.has_custom_resolution
+        self.has_quick_plays_support: bool = setting.has_quick_plays_support
+        self.is_quick_play_singleplayer: bool = setting.is_quick_play_singleplayer
+        self.is_quick_play_multiplayer: bool = setting.is_quick_play_multiplayer
+        self.is_quick_play_realms: bool = setting.is_quick_play_realms
+        self.maximum_heap_size: int = setting.maximum_heap_size
+        self.initial_heap_size: int = setting.initial_heap_size
+        self.auth_player_name: str = setting.auth_player_name
+        self.auth_uuid: str = setting.auth_uuid
+        self.auth_access_token: str = setting.auth_access_token
+        self.user_type: str = setting.user_type
+        self.quick_play_path: pathlib.Path = setting.quick_play_path if setting.quick_play_path is not None \
+            else setting.working_path / "quickPlay" / "log.json"
+        self.quick_play_singleplayer: str = setting.quick_play_singleplayer
+        self.quick_play_multiplayer: str = setting.quick_play_multiplayer
+        self.quick_play_realms: str = setting.quick_play_realms
 
     def launch(self) -> int:
         jvm_argument: str = self.jvm_argument_head
@@ -145,7 +126,7 @@ class MinecraftLauncher:
         native_libraries: list = []
         libraries: list = []
         if (datetime.datetime.fromisoformat(version_metadata["releaseTime"])
-            >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
+            >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):  # 1.19-pre1 的更改太大了，基本没法合并成一个逻辑
             for library in version_metadata["libraries"]:
                 if "rules" in library.keys():
                     is_eligible: bool = True
