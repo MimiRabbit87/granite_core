@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import datetime
 import json
 import logging
@@ -10,11 +11,12 @@ import zipfile
 from . import granite_settings
 
 
-class MinecraftLauncher:
+class MinecraftLaunch:
     def __init__(
             self,
             setting: granite_settings.GraniteSettings,
     ) -> None:
+        self.logger: logging.Logger = logging.getLogger("Launch")
         self.natives_directory: pathlib.Path = (setting.working_path / "versions" / setting.current_version /
                                                 f"{setting.current_version}-natives")
         self.launcher_name: str = "Granite"
@@ -125,8 +127,9 @@ class MinecraftLauncher:
         library_path: pathlib.Path = self.working_path / "libraries"
         native_libraries: list = []
         libraries: list = []
+        # 1.19-pre1 的更改太大了，基本没法合并成一个逻辑
         if (datetime.datetime.fromisoformat(version_metadata["releaseTime"])
-            >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):  # 1.19-pre1 的更改太大了，基本没法合并成一个逻辑
+            >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
             for library in version_metadata["libraries"]:
                 if "rules" in library.keys():
                     is_eligible: bool = True
@@ -224,7 +227,7 @@ class MinecraftLauncher:
         }
         final_argument: str = f"{jvm_argument} {game_argument}".replace("${", "{")
         final_argument = final_argument.format(**replacements)
-        logging.info(final_argument)
+        self.logger.info(final_argument)
 
         return 0
 

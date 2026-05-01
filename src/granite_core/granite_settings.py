@@ -12,12 +12,14 @@ import platform
 
 @dataclasses.dataclass
 class GraniteSettings:
+    logger: logging.Logger = logging.getLogger("Settings")
     system_name: str = dataclasses.field(
         init=False, default=platform.system().replace("Darwin", "osx").lower()
     )
     system_version: str = dataclasses.field(init=False, default=platform.version())
     system_architecture: str = dataclasses.field(init=False, default=platform.machine())
 
+    azure_client_id: str = "b5f67794-4e46-4538-9969-b0e2c84222ff"
     current_version: str | None = None
     working_path: pathlib.Path = dataclasses.field(default_factory=lambda: pathlib.Path.cwd() / ".minecraft")
     max_workers: int = 128
@@ -64,7 +66,7 @@ class GraniteSettings:
                         setattr(instance, key, value)
                 return instance
             except Exception as e:
-                logging.error(f"[Settings]: 加载配置文件失败：{e}，使用默认配置")
+                cls.logger.error(f"加载配置文件失败：{e}，使用默认配置")
         return cls()
 
     def save(self, config_path: pathlib.Path = pathlib.Path("Granite/settings.json")) -> None:

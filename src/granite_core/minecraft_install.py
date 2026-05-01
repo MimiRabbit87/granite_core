@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -13,10 +14,8 @@ import urllib3
 
 from . import task_queue
 
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s]%(message)s', encoding="utf-8")
 
-
-class MinecraftInstaller:
+class MinecraftInstall:
     def __init__(
             self,
             working_path: pathlib.Path,
@@ -25,7 +24,9 @@ class MinecraftInstaller:
             max_workers: int,
             temp_path: pathlib.Path
     ) -> None:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
+        # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        self.logger: logging.Logger = logging.getLogger("Install")
         self.install_running_flag: bool = True
         self.install_version: str = install_version
         self.install_main_path: pathlib.Path = working_path
@@ -70,12 +71,13 @@ class MinecraftInstaller:
     def install(self) -> int:
         start_time: float = time.time()
         self._install_tasks_init()
-        logging.info("[Installer]: 下载任务初始化完成")
+        self.logger.info("下载任务初始化完成")
 
         self.install_queue.run()
         self.install_queue.shutdown()
-        logging.info(f"[Installer]: 下载任务完成，用时 {time.time() - start_time:.3f}s，{self.failed_libraries=}，{self.failed_assets=}")
-        # logging.info(self.install_queue.get_results())  # 测试用的
+        self.logger.info(f"下载任务完成，"
+                     f"用时 {time.time() - start_time:.3f}s，{self.failed_libraries=}，{self.failed_assets=}")
+        # self.logger.info(self.install_queue.get_results())  # 测试用的
 
         return 0
 
@@ -105,13 +107,13 @@ class MinecraftInstaller:
             json.dump(version_metadata, version_metadata_file, indent=2)
 
         self.version_metadata = version_metadata
-        logging.info("[Installer]: 版本元数据下载完成")
+        self.logger.info("版本元数据下载完成")
 
         return 0
 
     def download_game_main_file(self) -> int:
         if not self.version_metadata:
-            logging.info(f"[Installer]: 未检测到游戏元数据，{self.version_metadata}")
+            self.logger.info(f"未检测到游戏元数据，{self.version_metadata}")
             self.install_running_flag = False
             return -1
 
@@ -120,7 +122,7 @@ class MinecraftInstaller:
                 if (self._get_file_sha1(self.install_main_path / "versions" /
                                         self.install_version / f"{self.install_version}.jar")
                         == self.version_metadata["downloads"]["client"]["sha1"]):
-                    logging.info("[Installer]: 已存在主文件")
+                    self.logger.info("已存在主文件")
                     return 0
 
         file_chunked: list[tuple[int, int]] = self._compute_download_file_chunked(
@@ -166,20 +168,19 @@ class MinecraftInstaller:
             shutil.rmtree(
                 self.temp_path / "downloads" / self.version_metadata["downloads"]["client"]["sha1"][: 2])
         else:
-            logging.info("[Installer]: 主文件下载失败，下载任务结束，等待其余线程完成执行，结果弃置")
+            self.logger.info("主文件下载失败，下载任务结束，等待其余线程完成执行，结果弃置")
             self.install_running_flag = False
-            self.install_queue.shutdown()
             return False
 
         # 校验散列值
         if (self._get_file_sha1(self.install_main_path / "versions" /
                                 self.install_version / f"{self.install_version}.jar")
                 != self.version_metadata["downloads"]["client"]["sha1"]):
-            logging.info(
-                f"[Installer]: 主文件散列值校验失败，已下载主文件散列值为 {hashlib.sha1(f.read()).hexdigest()}")
+            self.logger.info(
+                f"主文件散列值校验失败，已下载主文件散列值为 {hashlib.sha1(f.read()).hexdigest()}")
             return -1
 
-        logging.info("[Installer]: 版本主文件下载完成")
+        self.logger.info("版本主文件下载完成")
         return 0
 
     def download_game_asset_index(self) -> int:
@@ -190,7 +191,7 @@ class MinecraftInstaller:
                     if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" /
                                             f'{self.version_metadata["assetIndex"]["id"]}.json')
                             == self.version_metadata["assetIndex"]["sha1"]):
-                        logging.info("[Installer]: 已有资源索引文件")
+                        self.logger.info("已有资源索引文件")
                         break
 
             try:
@@ -211,10 +212,10 @@ class MinecraftInstaller:
                         'w') as f:
                     json.dump(asset_index, f, indent=2)
 
-                logging.info(f'[Installer]: 下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功')
+                self.logger.info(f'下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功')
 
             except Exception as e:
-                logging.error(f"[Installer]: 下载资源索引文件失败: {e}")
+                logging.error(f"下载资源索引文件失败: {e}")
 
             break
 
@@ -438,8 +439,8 @@ class MinecraftInstaller:
 
         return 0
 
-    @staticmethod
     def _compute_download_file_chunked(
+            self,
             url: str,  # 文件下载地址
             chunk_size: int  # 单分块大小
     ) -> list:
@@ -451,12 +452,12 @@ class MinecraftInstaller:
             response: requests.Response = requests.head(url, headers=headers, allow_redirects=True)
 
             if 'Accept-Ranges' not in response.headers:
-                logging.info("[Installer]: 服务器不支持分块下载，使用普通下载")
+                self.logger.info("服务器不支持分块下载，使用普通下载")
                 return []
 
             file_size: int = int(response.headers.get('Content-Length', 0))
         except Exception as e:
-            logging.error(f"[Installer]:\n{e}")
+            logging.error(f"[Install]:\n{e}")
             return []
 
         chunks: list = []
@@ -467,9 +468,8 @@ class MinecraftInstaller:
         logging.debug(chunks)
         return chunks
 
-    @staticmethod
-    def _download_chunk(worker_id: str, url: str, chunk_path: pathlib.Path, chunk_file: str,
-                       start: int, end: int) -> bool:
+    def _download_chunk(self, worker_id: str, url: str, chunk_path: pathlib.Path, chunk_file: str,
+                        start: int, end: int) -> bool:
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -485,11 +485,11 @@ class MinecraftInstaller:
                 for data in response.iter_content(chunk_size=8192):
                     f.write(data)
 
-            logging.info(f"[Installer]: 下载块 ({start}-{end}) 成功，{chunk_path / chunk_file}")
+            self.logger.info(f"下载块 ({start}-{end}) 成功，{chunk_path / chunk_file}")
 
             return True
         except Exception as e:
-            logging.error(f"[Installer]: 下载块失败 ({start}-{end})，于 {worker_id}: {e}")
+            logging.error(f"下载块失败 ({start}-{end})，于 {worker_id}: {e}")
             return False
 
     def _regular_download(
@@ -516,20 +516,20 @@ class MinecraftInstaller:
                 with open(store_path[i] / store_file[i], 'wb') as f:
                     f.write(response.content)
                 """if hashlib.sha1(response.content).hexdigest() != sha1:
-                    logging.info(
-                        f"[Installer]: 文件 {url} 散列值校验失败，"
+                    self.logger.info(
+                        f"文件 {url} 散列值校验失败，"
                         "于 {worker_id}，原文件散列值 {hashlib.sha1(response.content).hexdigest()}，但期望 {sha1}")
                     return False"""  # 看看不校验的话速度会不会快很多，果真，快了十几秒
 
             return True
         except Exception as e:
-            logging.error(f"[Installer]: 下载文件 {url} 失败，于 {worker_id}: {e}")
+            logging.error(f"下载文件 {url} 失败，于 {worker_id}: {e}")
             return False
 
     def _wait_main_file_downloading_completion(self, chunks: int) -> bool:
         chunk_result: dict[str, bool] = {}
         while True:
-            for result_key, result_value in self.install_queue.get_results.items():
+            for result_key, result_value in self.install_queue.__results.items():
                 if "main-file-worker-" in result_key:
                     chunk_result[result_key] = result_value
             if len(chunk_result) == chunks:
@@ -545,7 +545,7 @@ class MinecraftInstaller:
         return finish_install
 
     def _asset_downloading_callback(self, worker_id: str, asset_data: dict) -> int:
-        if self.install_queue.get_results[worker_id]:
+        if self.install_queue.__results[worker_id]:
             self.installed_assets += 1
         else:
             if not asset_data:
@@ -589,7 +589,7 @@ class MinecraftInstaller:
             library_data: dict | None = None,
             is_classifier: bool = False
     ) -> int:
-        if self.install_queue.get_results[worker_id]:
+        if self.install_queue.__results[worker_id]:
             self.installed_libraries += 1
         else:
             if not library_data:
@@ -652,8 +652,7 @@ class MinecraftInstaller:
                 break
             time.sleep(0.5)
 
-    @staticmethod
-    def _print_progress(description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> None:
+    def _print_progress(self, description: str, total_progress: int, lazy_progress_getter: typing.Callable) -> None:
         if total_progress == 0:
             return
 
@@ -668,7 +667,7 @@ class MinecraftInstaller:
                 else:
                     sleep_time = min(2.0, sleep_time * 1.2)
 
-                logging.info(f"[Installer]: {description}：{current} / {total_progress}")
+                self.logger.info(f"{description}：{current} / {total_progress}")
                 last_progress = current
 
             time.sleep(sleep_time)
