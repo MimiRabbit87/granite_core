@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import copy
 import heapq
 import threading
 import time
@@ -14,17 +13,18 @@ import traceback
 class TaskQueue:
     def __init__(self, max_workers: int) -> None:
         self.max_workers: int = max_workers
-        self.original_tasks = []
-        self.tasks = []  # 最小堆，存储 (-priority, task_id, task)
-        self.pending_tasks = []  # 也是一堆
-        self.task_counter = 0
+        self.__original_tasks: list = []
+        self.tasks: list = []  # 最小堆，存储 (-priority, task_id, task)
+        self.pending_tasks: list = []  # 也是一堆
+        self.task_counter: int = 0
         self.runnable_tasks: dict[int, dict] = {}
-        self.thread_pool = [threading.Thread(target=self.run_runnable_task, args=(i,)) for i in range(max_workers)]
+        self.thread_pool: list[threading.Thread] = \
+            [threading.Thread(target=self.run_runnable_task, args=(i,)) for i in range(max_workers)]
         self.stop_flag: bool = False
         self.lock: threading.Lock = threading.Lock()  # This is a lock
         self.idle_threads: list[int] = list(range(max_workers))
-        self.results: dict[str, ...] = {}
-        self.condition = threading.Condition(self.lock)  # And this is a condition
+        self.__results: dict[str, ...] = {}
+        self.condition: threading.Condition = threading.Condition(self.lock)  # And this is a condition
         for t in self.thread_pool:
             t.start()
 
@@ -63,9 +63,18 @@ class TaskQueue:
                 # 优先级默认为 0
                 priority = task.get("priority", 0)
                 heapq.heappush(self.tasks, (-priority, self.task_counter, task))
-                heapq.heappush(self.original_tasks, (-priority, self.task_counter, task))
+                heapq.heappush(self.__original_tasks, (-priority, self.task_counter, task))
                 self.task_counter += 1
                 self.condition.notify()
+
+    def restart_task(self, task_id: str) -> None:
+        """Restart a task in original_tasks"""
+        for i, task in enumerate(self.__original_tasks.copy()):
+            if task[2]["id"] == task_id:
+                edited_task: dict = task[2]
+                edited_task["priority"] = -task[0]
+                del self.original_tasks[i]
+                self.add_task(edited_task)
 
     def run(self) -> None:
         """The main running loop, assigning tasks to idle threads"""
@@ -112,7 +121,7 @@ class TaskQueue:
                     priority, task_counter, task = self.pending_tasks[i]
 
                     pre_tasks_set = set(task["pre_tasks"])
-                    results_keys = set(self.results.keys())
+                    results_keys = set(self.__results.keys())
                     if pre_tasks_set.issubset(results_keys):
                         ready_tasks.append((priority, task_counter, task))
                         self.pending_tasks.pop(i)
@@ -136,12 +145,12 @@ class TaskQueue:
                     try:
                         result = task["function"](*task.get("args", ()), **task.get("kwargs", {}))
                         with self.lock:
-                            self.results[task["id"]] = result
+                            self.__results[task["id"]] = result
                         break
                     except Exception as e:
                         if _ == task.get("max_retries", 0):
                             with self.lock:
-                                self.results[task["id"]] = traceback.format_exception(Exception, e, e.__traceback__)
+                                self.__results[task["id"]] = traceback.format_exception(Exception, e, e.__traceback__)
 
                 if task.get("max_retries", 0) != -1:  # 这个地方添柴（sb）设计有没有
                     break  # 不想动了
@@ -164,14 +173,26 @@ class TaskQueue:
             thread.join()
 
     @property
-    def get_results(self) -> dict[str, ...]:
+    def results(self) -> dict[str, ...]:
         with self.lock:
-            return copy.deepcopy(self.results)
+            return self.__results.copy()
+
+    @results.setter
+    def results(self, value: dict[str, ...]) -> None:
+        self.__results = value
+
+    def delete_result(self, task_id: str) -> None:
+        with self.lock:
+            del self.__results[task_id]
 
     @property
-    def get_original_tasks(self) -> list:
+    def original_tasks(self) -> list:
         with self.lock:
-            return copy.deepcopy(self.original_tasks)
+            return self.__original_tasks.copy()
+
+    @original_tasks.setter
+    def original_tasks(self, value: list) -> None:
+        self.__original_tasks = value
 
 
 if __name__ == "__main__":
@@ -243,5 +264,5 @@ if __name__ == "__main__":
     task_queue.shutdown()
 
     # 获取结果
-    results = task_queue.get_results
+    results = task_queue.results
     print("任务结果:", results)
