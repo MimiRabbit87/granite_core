@@ -10,40 +10,24 @@ import requests
 
 from . import granite_settings
 from . import task_queue
+from . import thread_pool
 
 
 class AccountLogin:
-    def __init__(self, settings: granite_settings.GraniteSettings) -> None:
+    def __init__(self, settings: granite_settings.GraniteSettings, thread_pool_: thread_pool.ThreadPool) -> None:
         self.logger: logging.Logger = logging.getLogger("Login")
         self.running_flag: bool = True
         self.settings: granite_settings.GraniteSettings = settings
-        self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(4)
+        self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(4, thread_pool_)
 
     def login(self) -> bool:
         self._login_tasks_init()
-        try:
-            self.task_queue.run()
+        self.task_queue.run()
+        if self.running_flag:
             self.task_queue.shutdown()
-            self.logger.info(f"登录完成，访问令牌：{self.task_queue.results['4']['access_token']}")
-        except KeyboardInterrupt:
-            pass
-
-        tasks = []
-        for i in range(len(original_tasks := self.task_queue.original_tasks)):
-            tasks.append({
-                "id": original_tasks[i][2]["id"],
-                "description": original_tasks[i][2]["description"]
-            })
-        with open("test_results.json", "w") as file:
-            json.dump(
-                {
-                    "tasks": tasks,
-                    "results": self.task_queue.results
-                },
-                file,
-                indent=2
-            )
-        return True
+            return True
+        else:
+            return False
 
     def msa_get_device_code(self) -> dict[str, str]:
         self.logger.info("使用设备代码流进行微软账户登录")
@@ -63,9 +47,9 @@ class AccountLogin:
 
         if response.status_code == 200:
             pyperclip.copy(response.json()["user_code"])
-            webbrowser.open("microsoft.com/link")
+            webbrowser.open(response.json()["verification_uri"])
             self.logger.info(f"设备代码对获取完成：{response.json()['user_code']}")
-            self.logger.info(f"已尝试将设备代码对复制至剪贴板并打开 microsoft.com/link")
+            self.logger.info(f"已尝试将设备代码对复制至剪贴板并打开 {response.json()['verification_uri']}")
             return response.json()
         else:
             self.logger.error(f"在获取设备代码对时发生错误：错误的响应状态码：{response.status_code}")
@@ -140,10 +124,10 @@ class AccountLogin:
         payload: dict[str, str] = {
             "Properties": {
                 "AuthMethod": "RPS",
-                "SiteName": "user.auth.xboxlive.com",
+                "SiteName": "user.auth.xboxlive.com",  # noqa
                 "RpsTicket": f"d={self.task_queue.results['1']['access_token']}"
             },
-            "RelyingParty": "http://auth.xboxlive.com",
+            "RelyingParty": "http://auth.xboxlive.com",  # noqa
             "TokenType": "JWT"
         }
 
@@ -154,11 +138,11 @@ class AccountLogin:
 
         return response.json()
 
-    def msa_xsts_authorize(self) -> dict:
+    def msa_xsts_authorize(self) -> dict:  # noqa
         if not self.running_flag:
             return {}
 
-        self.logger.info("微软账户登录流程四：XSTS 身份验证")
+        self.logger.info("微软账户登录流程四：XSTS 身份验证")  # noqa
         headers: dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json"
@@ -171,7 +155,7 @@ class AccountLogin:
                     self.task_queue.results["2"]["Token"]
                 ]
             },
-            "RelyingParty": "rp://api.minecraftservices.com/",
+            "RelyingParty": "rp://api.minecraftservices.com/",  # noqa
             "TokenType": "JWT"
         }
 
@@ -199,7 +183,7 @@ class AccountLogin:
                     self.task_queue.results["2"]["Token"]
                 ]
             },
-            "RelyingParty": "rp://api.minecraftservices.com/",
+            "RelyingParty": "rp://api.minecraftservices.com/",  # noqa
             "TokenType": "JWT"
         }
 
@@ -236,7 +220,7 @@ class AccountLogin:
         })
         self.task_queue.add_task({
             "id": "3",
-            "description": "XSTS 身份验证",
+            "description": "XSTS 身份验证",  # noqa
             "function": self.msa_xsts_authorize,
             "args": (),
             "pre_tasks": ["2"],

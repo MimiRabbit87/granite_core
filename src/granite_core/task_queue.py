@@ -6,27 +6,25 @@ from __future__ import annotations
 
 import heapq
 import threading
-import time
 import traceback
+
+from . import thread_pool
 
 
 class TaskQueue:
-    def __init__(self, max_workers: int) -> None:
+    def __init__(self, max_workers: int, thread_pool_: thread_pool.ThreadPool) -> None:
         self.max_workers: int = max_workers
         self.__original_tasks: list = []
         self.tasks: list = []  # 最小堆，存储 (-priority, task_id, task)
         self.pending_tasks: list = []  # 也是一堆
         self.task_counter: int = 0
         self.runnable_tasks: dict[int, dict] = {}
-        self.thread_pool: list[threading.Thread] = \
-            [threading.Thread(target=self.run_runnable_task, args=(i,)) for i in range(max_workers)]
+        self.thread_pool: thread_pool.ThreadPool = thread_pool_
         self.stop_flag: bool = False
         self.lock: threading.Lock = threading.Lock()  # This is a lock
         self.idle_threads: list[int] = list(range(max_workers))
         self.__results: dict[str, ...] = {}
         self.condition: threading.Condition = threading.Condition(self.lock)  # And this is a condition
-        for t in self.thread_pool:
-            t.start()
 
     def add_task(self, task: dict[str, ...]) -> None:
         """
@@ -78,8 +76,7 @@ class TaskQueue:
 
     def run(self) -> None:
         """The main running loop, assigning tasks to idle threads"""
-        pre_task_thread: threading.Thread = threading.Thread(target=self.check_pre_tasks)
-        pre_task_thread.start()
+        self.thread_pool.submit(self.check_pre_tasks)
 
         while not self.stop_flag:
             with self.lock:
@@ -87,7 +84,7 @@ class TaskQueue:
                     if (not self.tasks and
                             not self.runnable_tasks and
                             not self.pending_tasks and
-                            len(self.idle_threads) == len(self.thread_pool)
+                            len(self.idle_threads) == self.max_workers
                     ):  # 究极 shutdown 条件
                         break
                     self.condition.wait(1)
@@ -98,6 +95,7 @@ class TaskQueue:
                     _, _, task = heapq.heappop(self.tasks)
                     if self.idle_threads:
                         thread_id = self.idle_threads.pop(0)
+                        self.thread_pool.submit(self.run_runnable_task, (thread_id,))
                         self.runnable_tasks[thread_id] = task
                         self.condition.notify_all()
 
@@ -106,7 +104,7 @@ class TaskQueue:
     def check_pre_tasks(self) -> None:
         ready_tasks = []
         while not self.stop_flag:
-            with self.lock:
+            with self.condition:
                 if ready_tasks:
                     for task in ready_tasks:
                         heapq.heappush(self.tasks, task)
@@ -114,7 +112,7 @@ class TaskQueue:
                     ready_tasks = []
 
                 if not self.pending_tasks:
-                    break
+                    self.condition.wait()
 
                 # 遍历等待任务，看看 if 任务的前置执行完毕（看起来思路很 l，实则实现也是）
                 for i in range(len(self.pending_tasks)):
@@ -134,8 +132,7 @@ class TaskQueue:
                 if thread_id not in self.runnable_tasks:
                     if thread_id not in self.idle_threads:
                         self.idle_threads.append(thread_id)
-                    self.condition.wait()
-                    continue
+                    break
 
                 task = self.runnable_tasks[thread_id]
                 del self.runnable_tasks[thread_id]
@@ -169,8 +166,6 @@ class TaskQueue:
             self.tasks = []
             self.runnable_tasks = {}
             self.condition.notify_all()
-        for thread in self.thread_pool:
-            thread.join()
 
     @property
     def results(self) -> dict[str, ...]:
@@ -193,76 +188,3 @@ class TaskQueue:
     @original_tasks.setter
     def original_tasks(self, value: list) -> None:
         self.__original_tasks = value
-
-
-if __name__ == "__main__":
-    # test
-    def example_task(name, duration=1):
-        """示例任务函数"""
-        print(f"任务 {name} 开始执行，预计耗时 {duration}s")
-        time.sleep(duration)
-        result = f"任务 {name} 完成 in {duration}s"
-        print(result)
-        return result
-
-
-    # 创建任务队列
-    task_queue = TaskQueue(max_workers=3)
-
-    # also test
-    # 优先级越高，优先级越高（？）
-    task_queue.add_task({
-        "id": "0",
-        "description": "低优先级任务",
-        "function": example_task,
-        "args": ("低优先级", 3),
-        "priority": 1  # 低优先级
-    })
-
-    task_queue.add_task({
-        "id": "1",
-        "description": "中优先级任务",
-        "function": example_task,
-        "args": ("中优先级", 2),
-        "priority": 5  # 中优先级
-    })
-
-    task_queue.add_task({
-        "id": "2",
-        "description": "高优先级任务",
-        "function": example_task,
-        "args": ("高优先级", 1),
-        "priority": 10  # 高优先级
-    })
-
-    task_queue.add_task({
-        "id": "3",
-        "description": "带有前置任务的高优先级任务",
-        "function": example_task,
-        "args": ("带有前置任务的高优先级", 1),
-        "pre_tasks": [0],  # 前置
-        "priority": 10  # 高优先级
-    })
-
-    task_queue.add_task({
-        "id": "4",
-        "description": "高优先级任务",
-        "function": task_queue.add_task,
-        "args": ({
-                "id": 5,
-                "description": "带有前置任务的高优先级任务",
-                "function": example_task,
-                "args": ("带有前置任务的高优先级", 1),
-                "pre_tasks": [0],  # 前置
-                "priority": 10  # 高优先级
-        },),
-        "priority": 10  # 高优先级
-    })
-
-    # 启动任务队列
-    task_queue.run()
-    task_queue.shutdown()
-
-    # 获取结果
-    results = task_queue.results
-    print("任务结果:", results)

@@ -12,33 +12,34 @@ import typing
 import requests.adapters
 import urllib3
 
+from . import granite_settings
 from . import task_queue
+from . import thread_pool
 
 
 class MinecraftInstall:
     def __init__(
             self,
-            working_path: pathlib.Path,
+            settings: granite_settings.GraniteSettings,
             install_version: str,
-            download_source: str,
             max_workers: int,
-            temp_path: pathlib.Path
+            thread_pool_: thread_pool.ThreadPool
     ) -> None:
         # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.logger: logging.Logger = logging.getLogger("Install")
         self.install_running_flag: bool = True
         self.install_version: str = install_version
-        self.install_main_path: pathlib.Path = working_path
-        self.download_source: str = download_source
-        self.temp_path: pathlib.Path = temp_path
+        self.install_main_path: pathlib.Path = settings.working_path
+        self.download_source: str = settings.download_source
+        self.temp_path: pathlib.Path = settings.temp_path
         self.minecraft_version_manifest_path: dict[str, str] = {
             "Mojang": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
-            "BMCLAPI": "https://bmclapi2.bangbang93.com/mc/game/version_manifest.json"
+            "BMCLAPI": "https://bmclapi2.bangbang93.com/mc/game/version_manifest.json"  # noqa
         }
         self.minecraft_assets_path: dict[str, str] = {
             "Mojang": "https://resources.download.minecraft.net",
-            "BMCLAPI": "https://bmclapi2.bangbang93.com/assets"
+            "BMCLAPI": "https://bmclapi2.bangbang93.com/assets"  # noqa
         }
 
         # 下载中使用
@@ -56,7 +57,7 @@ class MinecraftInstall:
         )
         self.session.mount("https://", adapter)
 
-        self.install_queue: task_queue.TaskQueue = task_queue.TaskQueue(max_workers)
+        self.install_queue: task_queue.TaskQueue = task_queue.TaskQueue(max_workers, thread_pool_)
         self.version_manifest: dict = {}
         self.version_metadata: dict = {}
         self.total_assets: int = 0
@@ -94,8 +95,8 @@ class MinecraftInstall:
             if version["id"] == self.install_version:
                 version_metadata: dict = json.loads(
                     requests.request("GET",
-                                     version["url"].replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com")
-                                     if self.download_source == "BMCLAPI"
+                                     version["url"].replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com")  # noqa
+                                     if self.download_source == "BMCLAPI"  # noqa
                                      else version["url"]).text)
                 break
         if not version_metadata:
@@ -128,7 +129,7 @@ class MinecraftInstall:
         file_chunked: list[tuple[int, int]] = self._compute_download_file_chunked(
             self.version_metadata["downloads"]["client"]["url"] if self.download_source == "Mojang"
             else self.version_metadata["downloads"]["client"]["url"]
-            .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),
+            .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # noqa
             4194304
         )
         if not file_chunked:
@@ -143,7 +144,7 @@ class MinecraftInstall:
                     f"main-file-worker-{i}",  # 给个 id，debug 用
                     self.version_metadata["downloads"]["client"]["url"] if self.download_source == "Mojang"
                     else self.version_metadata["downloads"]["client"]["url"]
-                    .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # 远端地址
+                    .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # 远端地址  # noqa
                     self.temp_path / "downloads" /
                     self.version_metadata["downloads"]["client"]["sha1"][:2] /
                     self.version_metadata["downloads"]["client"]["sha1"],  # 下载块路径
@@ -196,14 +197,15 @@ class MinecraftInstall:
 
             try:
                 headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
                                   "Chrome/91.0.4472.124 Safari/537.36"
                 }
                 asset_index: dict = json.loads(requests.request(
                     "GET",
                     self.version_metadata["assetIndex"]["url"] if self.download_source == "Mojang"
                     else self.version_metadata["assetIndex"]["url"].replace("piston-meta.mojang.com",
-                                                                            "bmclapi2.bangbang93.com"),
+                                                                            "bmclapi2.bangbang93.com"),  # noqa
                     headers=headers, timeout=60).text)
                 (self.install_main_path / "assets" / "indexes").mkdir(parents=True, exist_ok=True)
                 with open(
@@ -446,7 +448,8 @@ class MinecraftInstall:
     ) -> list:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
                               "Chrome/91.0.4472.124 Safari/537.36"
             }
             response: requests.Response = requests.head(url, headers=headers, allow_redirects=True)
@@ -472,7 +475,8 @@ class MinecraftInstall:
                         start: int, end: int) -> bool:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
                               "Chrome/91.0.4472.124 Safari/537.36",
                 "Range": f"bytes={start}-{end}"
             }
@@ -498,13 +502,14 @@ class MinecraftInstall:
             url: str,
             store_path: list[pathlib.Path],
             store_file: list[str],
-            sha1: str
+            sha1: str  # noqa
     ) -> bool:
         if len(store_path) != len(store_file):
             return False
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                              "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
                               "Chrome/91.0.4472.124 Safari/537.36"
             }
 
@@ -515,10 +520,11 @@ class MinecraftInstall:
                 store_path[i].mkdir(parents=True, exist_ok=True)
                 with open(store_path[i] / store_file[i], 'wb') as f:
                     f.write(response.content)
-                """if hashlib.sha1(response.content).hexdigest() != sha1:
+                # noinspection SpellCheckingInspection
+                """if hashlib.sha1(response.content).hexdigest() != sha1:  # noqa
                     self.logger.info(
                         f"文件 {url} 散列值校验失败，"
-                        "于 {worker_id}，原文件散列值 {hashlib.sha1(response.content).hexdigest()}，但期望 {sha1}")
+                        "于 {worker_id}，原文件散列值 {hashlib.sha1(response.content).hexdigest()}，但期望 {sha1}")  # noqa
                     return False"""  # 看看不校验的话速度会不会快很多，果真，快了十几秒
 
             return True
@@ -605,7 +611,7 @@ class MinecraftInstall:
                     "args": (
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
                         # 远端地址
-                        library_data["url"] if self.download_source == "BMCLAPI"
+                        library_data["url"] if self.download_source == "BMCLAPI"  # noqa
                         else library_data["url"].replace("https://libraries.minecraft.net",
                                                          "https://bmclapi2.bangbang93.com/maven"),
                         # 下载支持库文件路径
@@ -626,7 +632,7 @@ class MinecraftInstall:
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
-                        library_data["downloads"]["artifact"]["url"] if self.download_source == "BMCLAPI"
+                        library_data["downloads"]["artifact"]["url"] if self.download_source == "BMCLAPI"  # noqa
                         else library_data["downloads"]["artifact"]["url"]
                         .replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),  # 远端地址
                         [(self.install_main_path / "libraries" /

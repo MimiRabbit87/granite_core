@@ -9,14 +9,19 @@ import shutil
 import zipfile
 
 from . import granite_settings
+from . import task_queue
+from . import thread_pool
 
 
 class MinecraftLaunch:
     def __init__(
             self,
             setting: granite_settings.GraniteSettings,
+            thread_pool_: thread_pool.ThreadPool
     ) -> None:
         self.logger: logging.Logger = logging.getLogger("Launch")
+        self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(3, thread_pool_)
+
         self.natives_directory: pathlib.Path = (setting.working_path / "versions" / setting.current_version /
                                                 f"{setting.current_version}-natives")
         self.launcher_name: str = "Granite"
@@ -48,14 +53,53 @@ class MinecraftLaunch:
         self.quick_play_multiplayer: str = setting.quick_play_multiplayer
         self.quick_play_realms: str = setting.quick_play_realms
 
+        self.version_metadata: dict = {}
+
     def launch(self) -> int:
-        jvm_argument: str = self.jvm_argument_head
-        game_argument: str = ""
-
         with open(self.working_path / "versions" / self.version / f"{self.version}.json") as file:
-            version_metadata: dict = json.load(file)
+            self.version_metadata = json.load(file)
 
-        if "arguments" not in version_metadata:
+        self._launch_tasks_init()
+        self.task_queue.run()
+        self.task_queue.shutdown()
+
+        replacements: dict = {
+            # JVM 参数
+            "natives_directory": f'"{self.natives_directory}"',
+            "launcher_name": f'"{self.launcher_name}"',
+            "launcher_version": self.launcher_version,
+            "classpath": self.task_queue.results["1"],
+            "xmn": self.maximum_heap_size,
+            "xmx": self.initial_heap_size,
+
+            # 游戏参数
+            "auth_player_name": self.auth_player_name,
+            "version_name": f'"{self.version}"',
+            "game_directory": f'"{self.working_path}"',
+            "assets_root": f'"{self.working_path / "assets"}"',
+            "assets_index_name": self.version_metadata["assetIndex"]["id"],
+            "auth_uuid": self.auth_uuid,
+            "auth_access_token": self.auth_access_token,
+            "user_type":self.user_type,
+            "version_type": self.version_metadata["type"],
+            "clientid": "0",  # noqa
+            "auth_xuid": "0",  # noqa
+            "quickPlayPath": f'"{self.quick_play_path}"',
+            "quickPlaySingleplayer": self.quick_play_singleplayer,
+            "quickPlayMultiplayer": self.quick_play_multiplayer,
+            "quickPlayRealms": self.quick_play_realms,
+        }
+        final_argument: str = \
+            f"{self.task_queue.results["0"]} {self.task_queue.results["2"]}".replace("${", "{")
+        final_argument = final_argument.format(**replacements)
+        self.logger.info(final_argument)
+
+        return 0
+
+    def analyze_jvm_argument(self) -> str:
+        jvm_argument: str = self.jvm_argument_head
+
+        if "arguments" not in self.version_metadata:
             jvm: list = [
                 {
                     "rules": [
@@ -102,7 +146,7 @@ class MinecraftLaunch:
                 "${classpath}"
             ]
         else:
-            jvm: list = version_metadata["arguments"]["jvm"]
+            jvm: list = self.version_metadata["arguments"]["jvm"]
         for argument_information in jvm:
             current_argument = ""
             if type(argument_information) is dict:
@@ -123,14 +167,21 @@ class MinecraftLaunch:
                 current_argument = argument_information
             jvm_argument += f" {current_argument}"
 
+        jvm_argument += (f" -Xmx{str(self.maximum_heap_size)}M"
+                         f" -Xms{str(self.initial_heap_size)}M"
+                         f" {self.version_metadata['mainClass']}")
+
+        return jvm_argument
+
+    def analyze_libraries(self) -> str:
         self.natives_directory.mkdir(parents=True, exist_ok=True)
         library_path: pathlib.Path = self.working_path / "libraries"
         native_libraries: list = []
         libraries: list = []
         # 1.19-pre1 的更改太大了，基本没法合并成一个逻辑
-        if (datetime.datetime.fromisoformat(version_metadata["releaseTime"])
-            >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
-            for library in version_metadata["libraries"]:
+        if (datetime.datetime.fromisoformat(self.version_metadata["releaseTime"])
+                >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
+            for library in self.version_metadata["libraries"]:
                 if "rules" in library.keys():
                     is_eligible: bool = True
                     for rule in library["rules"]:
@@ -143,7 +194,7 @@ class MinecraftLaunch:
 
                 libraries.append(library_path / library["downloads"]["artifact"]["path"])
         else:
-            for library in version_metadata["libraries"]:
+            for library in self.version_metadata["libraries"]:
                 if "rules" in library.keys():
                     is_eligible: bool = True
                     for rule in library["rules"]:
@@ -171,14 +222,15 @@ class MinecraftLaunch:
             classpath += f";{str(library)}" if self.system_name == "windows" else f":{str(library)}"
         classpath = f'"{classpath}"'
 
-        jvm_argument += (f" -Xmx{str(self.maximum_heap_size)}M"
-                         f" -Xms{str(self.initial_heap_size)}M"
-                         f' {version_metadata["mainClass"]}')
+        return classpath
 
-        if "arguments" not in version_metadata:
-            game_argument = version_metadata["minecraftArguments"]
+    def analyze_game_argument(self) -> str:
+        game_argument: str = ""
+
+        if "arguments" not in self.version_metadata:
+            game_argument = self.version_metadata["minecraftArguments"]
         else:
-            for argument_information in version_metadata["arguments"]["game"]:
+            for argument_information in self.version_metadata["arguments"]["game"]:
                 current_argument: str = ""
                 if "rules" in argument_information:
                     is_eligible: bool = True
@@ -199,37 +251,30 @@ class MinecraftLaunch:
                 game_argument += f" {current_argument}"
             game_argument = game_argument.strip()
 
-        replacements: dict = {
-            # JVM 参数
-            "natives_directory": f'"{self.natives_directory}"',
-            "launcher_name": f'"{self.launcher_name}"',
-            "launcher_version": self.launcher_version,
-            "classpath": classpath,
-            "xmn": self.maximum_heap_size,
-            "xmx": self.initial_heap_size,
+        return game_argument
 
-            # 游戏参数
-            "auth_player_name": self.auth_player_name,
-            "version_name": f'"{self.version}"',
-            "game_directory": f'"{self.working_path}"',
-            "assets_root": f'"{self.working_path / "assets"}"',
-            "assets_index_name": version_metadata["assetIndex"]["id"],
-            "auth_uuid": self.auth_uuid,
-            "auth_access_token": self.auth_access_token,
-            "user_type":self.user_type,
-            "version_type": version_metadata["type"],
-            "clientid": "0",
-            "auth_xuid": "0",
-            "quickPlayPath": f'"{self.quick_play_path}"',
-            "quickPlaySingleplayer": self.quick_play_singleplayer,
-            "quickPlayMultiplayer": self.quick_play_multiplayer,
-            "quickPlayRealms": self.quick_play_realms,
-        }
-        final_argument: str = f"{jvm_argument} {game_argument}".replace("${", "{")
-        final_argument = final_argument.format(**replacements)
-        self.logger.info(final_argument)
-
-        return 0
+    def _launch_tasks_init(self) -> None:
+        self.task_queue.add_task({
+            "id": "0",
+            "description": "解析 JVM 参数",
+            "function": self.analyze_jvm_argument,
+            "args": (),
+            "priority": 10
+        })
+        self.task_queue.add_task({
+            "id": "1",
+            "description": "解析支持库",
+            "function": self.analyze_libraries,
+            "args": (),
+            "priority": 10
+        })
+        self.task_queue.add_task({
+            "id": "2",
+            "description": "解析游戏参数",
+            "function": self.analyze_game_argument,
+            "args": (),
+            "priority": 10
+        })
 
     def _unzip_native_libraries(self, native_libraries: list[pathlib.Path]) -> None:
         # shutil.rmtree(self.natives_directory)

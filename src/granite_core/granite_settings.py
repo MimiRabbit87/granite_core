@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-import json  # 本来按照行业趋向应该用 TOML 的，but tomllib 在 3.11 才被加入，还不熟，就用 JSON 了
+import json  # 本来按照行业趋向应该用 TOML 的，but tomllib 在 3.11 才被加入，还不熟，就用 JSON 了  # noqa
 import logging
 import os
 import pathlib
@@ -21,6 +21,7 @@ class GraniteSettings:
 
     azure_client_id: str = "b5f67794-4e46-4538-9969-b0e2c84222ff"
     current_version: str | None = None
+    download_source: str = "Mojang"
     working_path: pathlib.Path = dataclasses.field(default_factory=lambda: pathlib.Path.cwd() / ".minecraft")
     max_workers: int = 128
     temp_path: pathlib.Path = dataclasses.field(
