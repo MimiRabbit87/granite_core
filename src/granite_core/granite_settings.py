@@ -54,7 +54,7 @@ class GraniteSettings:
         self.temp_path.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def load(cls, config_path: pathlib.Path = pathlib.Path("Granite/settings.json")) -> GraniteSettings:
+    def load(cls, config_path: pathlib.Path=pathlib.Path("Granite/settings.json")) -> GraniteSettings:
         if config_path.exists():
             try:
                 with config_path.open("r", encoding="utf-8") as f:
@@ -70,7 +70,7 @@ class GraniteSettings:
                 cls.logger.error(f"加载配置文件失败：{e}，使用默认配置")
         return cls()
 
-    def save(self, config_path: pathlib.Path = pathlib.Path("Granite/settings.json")) -> None:
+    def save(self, config_path: pathlib.Path=pathlib.Path("Granite/settings.json")) -> None:
         serializable: dict = {
             k: v for k, v in self.__dict__.items()
             if not k.startswith("system_") and v is not None

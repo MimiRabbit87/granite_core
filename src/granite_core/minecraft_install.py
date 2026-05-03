@@ -187,10 +187,10 @@ class MinecraftInstall:
     def download_game_asset_index(self) -> int:
         while True:
             if pathlib.Path.exists(
-                    self.install_main_path / "assets" / "indexes" / f'{self.version_metadata["assetIndex"]["id"]}.json'
+                    self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json"
             ):
                     if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" /
-                                            f'{self.version_metadata["assetIndex"]["id"]}.json')
+                                            f"{self.version_metadata["assetIndex"]["id"]}.json")
                             == self.version_metadata["assetIndex"]["sha1"]):
                         self.logger.info("已有资源索引文件")
                         break
@@ -210,11 +210,11 @@ class MinecraftInstall:
                 (self.install_main_path / "assets" / "indexes").mkdir(parents=True, exist_ok=True)
                 with open(
                         self.install_main_path / "assets" / "indexes" /
-                        f'{self.version_metadata["assetIndex"]["id"]}.json',
-                        'w') as f:
+                        f"{self.version_metadata["assetIndex"]["id"]}.json",
+                        "w") as f:
                     json.dump(asset_index, f, indent=2)
 
-                self.logger.info(f'下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功')
+                self.logger.info(f"下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功")
 
             except Exception as e:
                 logging.error(f"下载资源索引文件失败: {e}")
@@ -225,7 +225,7 @@ class MinecraftInstall:
 
     def download_game_assets(self) -> int:
         with open(self.install_main_path / "assets" / "indexes" /
-                  f'{self.version_metadata["assetIndex"]["id"]}.json') as f:
+                  f"{self.version_metadata["assetIndex"]["id"]}.json") as f:
             asset_index: dict = json.load(f)
         assets_info: tuple = tuple(asset_index["objects"].items())
         self.total_assets = len(asset_index["objects"])
@@ -257,12 +257,12 @@ class MinecraftInstall:
 
             self.install_queue.add_task({
                 "id": f"asset-downloading-worker-{i}",
-                "description": f'下载游戏资源文件的 ({assets_info[i][0]}, {assets_info[i][1]["hash"]})',
+                "description": f"下载游戏资源文件的 ({assets_info[i][0]}, {assets_info[i][1]['hash']})",
                 "function": self._regular_download,
                 "args": (
                     f"asset-downloading-worker-{i}",  # 给个 id，debug 用
                     f"{self.minecraft_assets_path[self.download_source]}/"
-                    f'{assets_info[i][1]["hash"][:2]}/{assets_info[i][1]["hash"]}',  # 远端地址
+                    f"{assets_info[i][1]["hash"][:2]}/{assets_info[i][1]['hash']}",  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / assets_info[i][1]["hash"][:2],
                         (self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0]).parent,
@@ -314,8 +314,8 @@ class MinecraftInstall:
 
                     self.install_queue.add_task({
                         "id": f"library-downloading-worker-{i}",
-                        "description": f'下载游戏支持库 ({self.version_metadata["libraries"][i]["name"]}) 的'
-                                       f'动态链接库文件 ({pathlib.Path(classifier["path"]).name})',
+                        "description": f"下载游戏支持库 ({self.version_metadata["libraries"][i]['name']}) 的"
+                                       f"动态链接库文件 ({pathlib.Path(classifier['path']).name})",
                         "function": self._regular_download,
                         "args": (
                             f"library-downloading-worker-{i}",  # 给个 id，debug 用
@@ -351,7 +351,7 @@ class MinecraftInstall:
 
                 self.install_queue.add_task({
                     "id": f"library-downloading-worker-{i}",
-                    "description": f'下载游戏支持库文件的 ({self.version_metadata["libraries"][i]["name"]})',
+                    "description": f"下载游戏支持库文件的 ({self.version_metadata['libraries'][i]['name']})",
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{i}",  # 给个 id，debug 用
@@ -454,11 +454,11 @@ class MinecraftInstall:
             }
             response: requests.Response = requests.head(url, headers=headers, allow_redirects=True)
 
-            if 'Accept-Ranges' not in response.headers:
+            if "Accept-Ranges" not in response.headers:
                 self.logger.info("服务器不支持分块下载，使用普通下载")
                 return []
 
-            file_size: int = int(response.headers.get('Content-Length', 0))
+            file_size: int = int(response.headers.get("Content-Length", 0))
         except Exception as e:
             logging.error(f"[Install]:\n{e}")
             return []
@@ -485,7 +485,7 @@ class MinecraftInstall:
             response.raise_for_status()
 
             chunk_path.mkdir(parents=True, exist_ok=True)
-            with open(chunk_path / chunk_file, 'wb') as f:
+            with open(chunk_path / chunk_file, "wb") as f:
                 for data in response.iter_content(chunk_size=8192):
                     f.write(data)
 
@@ -518,7 +518,7 @@ class MinecraftInstall:
 
             for i in range(len(store_path)):
                 store_path[i].mkdir(parents=True, exist_ok=True)
-                with open(store_path[i] / store_file[i], 'wb') as f:
+                with open(store_path[i] / store_file[i], "wb") as f:
                     f.write(response.content)
                 # noinspection SpellCheckingInspection
                 """if hashlib.sha1(response.content).hexdigest() != sha1:  # noqa
@@ -560,12 +560,12 @@ class MinecraftInstall:
 
             self._retry_download_game_resources({
                 "id": f"asset-downloading-worker-{self.retried_assets}",
-                "description": f'下载游戏资源文件的 ({asset_data[0]}, {asset_data[1]["hash"]})',
+                "description": f"下载游戏资源文件的 ({asset_data[0]}, {asset_data[1]['hash']})",
                 "function": self._regular_download,
                 "args": (
                     f"asset-downloading-worker-{self.retried_assets}",  # 给个 id，debug 用
                     f"{self.minecraft_assets_path[self.download_source]}/"
-                    f'{asset_data[1]["hash"][:2]}/{asset_data[1]["hash"]}',  # 远端地址
+                    f"{asset_data[1]['hash'][:2]}/{asset_data[1]['hash']}",  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / asset_data[1]["hash"][:2],
                         (self.install_main_path / "assets" / "virtual" / "legacy" / asset_data[0]).parent,
@@ -605,8 +605,8 @@ class MinecraftInstall:
             if is_classifier:
                 self._retry_download_game_resources({
                     "id": f"library-downloading-worker-retry-{self.retried_libraries}",
-                    "description": f'重试下载游戏支持库 ({library_data["name"]}) 的'
-                                   f'动态链接库文件 ({pathlib.Path(library_data["path"]).name})',
+                    "description": f"重试下载游戏支持库 ({library_data['name']}) 的"
+                                   f"动态链接库文件 ({pathlib.Path(library_data['path']).name})",
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
@@ -628,7 +628,7 @@ class MinecraftInstall:
             else:
                 self._retry_download_game_resources({
                     "id": f"library-downloading-worker-retry-{self.retried_libraries}",
-                    "description": f'重试下载游戏支持库文件的 ({library_data["name"]})',
+                    "description": f"重试下载游戏支持库文件的 ({library_data['name']})",
                     "function": self._regular_download,
                     "args": (
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
@@ -680,5 +680,5 @@ class MinecraftInstall:
 
     @staticmethod
     def _get_file_sha1(file_path: pathlib.Path) -> str:
-        with open(file_path, 'rb') as f:
+        with open(file_path, "rb") as f:
             return hashlib.sha1(f.read()).hexdigest()

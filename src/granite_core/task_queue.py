@@ -7,6 +7,7 @@ from __future__ import annotations
 import heapq
 import threading
 import traceback
+import typing
 
 from . import thread_pool
 
@@ -23,10 +24,10 @@ class TaskQueue:
         self.stop_flag: bool = False
         self.lock: threading.Lock = threading.Lock()  # This is a lock
         self.idle_threads: list[int] = list(range(max_workers))
-        self.__results: dict[str, ...] = {}
+        self.__results: dict[str, typing.Any] = {}
         self.condition: threading.Condition = threading.Condition(self.lock)  # And this is a condition
 
-    def add_task(self, task: dict[str, ...]) -> None:
+    def add_task(self, task: dict[str, typing.Any]) -> None:
         """
         Task format:
         {
@@ -168,12 +169,12 @@ class TaskQueue:
             self.condition.notify_all()
 
     @property
-    def results(self) -> dict[str, ...]:
+    def results(self) -> dict[str, typing.Any]:
         with self.lock:
             return self.__results.copy()
 
     @results.setter
-    def results(self, value: dict[str, ...]) -> None:
+    def results(self, value: dict[str, typing.Any]) -> None:
         self.__results = value
 
     def delete_result(self, task_id: str) -> None:

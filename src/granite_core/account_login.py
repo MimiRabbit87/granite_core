@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import time
 import webbrowser
@@ -46,10 +45,11 @@ class AccountLogin:
         )
 
         if response.status_code == 200:
-            pyperclip.copy(response.json()["user_code"])
-            webbrowser.open(response.json()["verification_uri"])
             self.logger.info(f"设备代码对获取完成：{response.json()['user_code']}")
-            self.logger.info(f"已尝试将设备代码对复制至剪贴板并打开 {response.json()['verification_uri']}")
+            pyperclip.copy(response.json()["user_code"])
+            self.logger.info(f"已尝试将设备代码对复制至剪贴板")
+            webbrowser.open(response.json()["verification_uri"])
+            self.logger.info(f"已尝试使用浏览器打开 {response.json()['verification_uri']}")
             return response.json()
         else:
             self.logger.error(f"在获取设备代码对时发生错误：错误的响应状态码：{response.status_code}")
@@ -60,23 +60,23 @@ class AccountLogin:
 
     def msa_get_user_authorization_status(self) -> dict[str, str]:
         self.logger.info("微软账户登录流程二：轮询用户授权状态")
-        device_info = self.task_queue.results["0"]
-        device_code = device_info["device_code"]
-        interval = float(device_info["interval"])
-        expires_in = float(device_info["expires_in"])
-        start_time = time.time()
+        device_info: dict[str, str | int] = self.task_queue.results["0"]
+        device_code: str = device_info["device_code"]
+        interval: float = float(device_info["interval"])
+        expires_in: float = float(device_info["expires_in"])
+        start_time: float = time.time()
         self.logger.info(f"每次轮询间隔 {interval}s，有效期为 {expires_in}s")
 
         while time.time() - start_time < expires_in:
-            result = self._msa_authorization_polling(device_code)
+            result: dict = self._msa_authorization_polling(device_code)
 
             if "access_token" in result:
                 self.logger.info("用户授权成功")
                 return result
 
-            error = result.get("error")
+            error: str = result.get("error")
             if error == "authorization_pending":
-                wait = float(result.get("interval", interval))
+                wait: float = float(result.get("interval", interval))
                 time.sleep(wait)
             elif error == "slow_down":
                 interval += 1

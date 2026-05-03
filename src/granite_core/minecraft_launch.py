@@ -6,6 +6,7 @@ import logging
 import pathlib
 import re
 import shutil
+import time
 import zipfile
 
 from . import granite_settings
@@ -56,6 +57,8 @@ class MinecraftLaunch:
         self.version_metadata: dict = {}
 
     def launch(self) -> int:
+        start_time: float = time.time()
+
         with open(self.working_path / "versions" / self.version / f"{self.version}.json") as file:
             self.version_metadata = json.load(file)
 
@@ -65,8 +68,8 @@ class MinecraftLaunch:
 
         replacements: dict = {
             # JVM 参数
-            "natives_directory": f'"{self.natives_directory}"',
-            "launcher_name": f'"{self.launcher_name}"',
+            "natives_directory": f"\"{self.natives_directory}\"",
+            "launcher_name": f"\"{self.launcher_name}\"",
             "launcher_version": self.launcher_version,
             "classpath": self.task_queue.results["1"],
             "xmn": self.maximum_heap_size,
@@ -74,9 +77,9 @@ class MinecraftLaunch:
 
             # 游戏参数
             "auth_player_name": self.auth_player_name,
-            "version_name": f'"{self.version}"',
-            "game_directory": f'"{self.working_path}"',
-            "assets_root": f'"{self.working_path / "assets"}"',
+            "version_name": f"\"{self.version}\"",
+            "game_directory": f"\"{self.working_path}\"",
+            "assets_root": f"\"{self.working_path / 'assets'}\"",
             "assets_index_name": self.version_metadata["assetIndex"]["id"],
             "auth_uuid": self.auth_uuid,
             "auth_access_token": self.auth_access_token,
@@ -84,7 +87,7 @@ class MinecraftLaunch:
             "version_type": self.version_metadata["type"],
             "clientid": "0",  # noqa
             "auth_xuid": "0",  # noqa
-            "quickPlayPath": f'"{self.quick_play_path}"',
+            "quickPlayPath": f"\"{self.quick_play_path}\"",
             "quickPlaySingleplayer": self.quick_play_singleplayer,
             "quickPlayMultiplayer": self.quick_play_multiplayer,
             "quickPlayRealms": self.quick_play_realms,
@@ -92,6 +95,7 @@ class MinecraftLaunch:
         final_argument: str = \
             f"{self.task_queue.results["0"]} {self.task_queue.results["2"]}".replace("${", "{")
         final_argument = final_argument.format(**replacements)
+        self.logger.info(f"启动参数解析耗时 {time.time() - start_time:.3f}s")
         self.logger.info(final_argument)
 
         return 0
@@ -147,8 +151,9 @@ class MinecraftLaunch:
             ]
         else:
             jvm: list = self.version_metadata["arguments"]["jvm"]
+
+        argument_list: list[str] = []
         for argument_information in jvm:
-            current_argument = ""
             if type(argument_information) is dict:
                 is_eligible: bool = True
                 for rule in argument_information["rules"]:
@@ -157,19 +162,24 @@ class MinecraftLaunch:
                         break
                 if not is_eligible:
                     continue
-            if type(argument_information) is dict:
+
                 if type(argument_information["value"]) is list:
                     for argument in argument_information["value"]:
-                        current_argument += f" {argument}"
+                        argument_list.append(f"\"{argument}\"" if " " in argument else argument)
                 else:
-                    current_argument = argument_information["value"]
+                    argument_list.append(
+                        f"\"{argument_information["value"]}\""
+                        if " " in argument_information["value"]
+                        else argument_information["value"]
+                    )
             else:
-                current_argument = argument_information
-            jvm_argument += f" {current_argument}"
+                argument_list.append(
+                    f"\"{argument_information}\"" if " " in argument_information else argument_information
+                )
 
-        jvm_argument += (f" -Xmx{str(self.maximum_heap_size)}M"
-                         f" -Xms{str(self.initial_heap_size)}M"
-                         f" {self.version_metadata['mainClass']}")
+        jvm_argument = (f"{jvm_argument} {' '.join(argument_list)} "
+                        f"{' '.join([f'-Xmx{str(self.maximum_heap_size)}M', f'-Xms{str(self.initial_heap_size)}M'])} "
+                        f"{self.version_metadata['mainClass']}")
 
         return jvm_argument
 
@@ -182,6 +192,11 @@ class MinecraftLaunch:
         if (datetime.datetime.fromisoformat(self.version_metadata["releaseTime"])
                 >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
             for library in self.version_metadata["libraries"]:
+                current_library_maven: list[str] = library["name"].split(":")
+                current_library_path: pathlib.Path = \
+                    pathlib.Path() / current_library_maven[0].replace(".", "/") / current_library_maven[1] / \
+                    current_library_maven[2] / f"{current_library_maven[1]}-{current_library_maven[2]}.jar"
+
                 if "rules" in library.keys():
                     is_eligible: bool = True
                     for rule in library["rules"]:
@@ -190,11 +205,16 @@ class MinecraftLaunch:
                             break
                     if not is_eligible:
                         continue
-                    native_libraries.append(library_path / library["downloads"]["artifact"]["path"])
+                    native_libraries.append(library_path / current_library_path)
 
-                libraries.append(library_path / library["downloads"]["artifact"]["path"])
+                libraries.append(library_path / current_library_path)
         else:
             for library in self.version_metadata["libraries"]:
+                current_library_maven: list[str] = library["name"].split(":")
+                current_library_path: pathlib.Path = \
+                    pathlib.Path() / current_library_maven[0].replace(".", "/") / current_library_maven[1] / \
+                    current_library_maven[2] / f"{current_library_maven[1]}-{current_library_maven[2]}.jar"
+
                 if "rules" in library.keys():
                     is_eligible: bool = True
                     for rule in library["rules"]:
@@ -204,34 +224,33 @@ class MinecraftLaunch:
                     if not is_eligible:
                         continue
                 if "natives" in library.keys():
-                    libraries.append(
+                    libraries.append(str(
                         library_path /
                         library["downloads"]["classifiers"][library["natives"][self.system_name]]["path"]
-                    )
-                    native_libraries.append(
+                    ))
+                    native_libraries.append(str(
                         library_path /
                         library["downloads"]["classifiers"][library["natives"][self.system_name]]["path"]
-                    )
-                if "artifact" in library["downloads"].keys():
-                    libraries.append(library_path / library["downloads"]["artifact"]["path"])
+                    ))
+                if "downloads" in library:
+                    if "artifact" in library["downloads"].keys():
+                        libraries.append(str(library_path / current_library_path))
+                else:
+                    libraries.append(str(library_path / current_library_path))
             self._unzip_native_libraries(native_libraries)
 
-        libraries.append(self.working_path / "versions" / self.version / f"{self.version}.jar")
-        classpath: str = str(libraries[0])
-        for library in libraries[1:]:
-            classpath += f";{str(library)}" if self.system_name == "windows" else f":{str(library)}"
-        classpath = f'"{classpath}"'
+        libraries.append(str(self.working_path / "versions" / self.version / f"{self.version}.jar"))
+        classpath: str = ";".join(libraries) if self.system_name == "windows" else ":".join(libraries)
+        classpath = f"\"{classpath}\""
 
         return classpath
 
     def analyze_game_argument(self) -> str:
-        game_argument: str = ""
-
         if "arguments" not in self.version_metadata:
             game_argument = self.version_metadata["minecraftArguments"]
         else:
+            argument_list: list[str] = []
             for argument_information in self.version_metadata["arguments"]["game"]:
-                current_argument: str = ""
                 if "rules" in argument_information:
                     is_eligible: bool = True
                     for rule in argument_information["rules"]:
@@ -243,13 +262,13 @@ class MinecraftLaunch:
                 if type(argument_information) is dict:
                     if type(argument_information["value"]) is list:
                         for argument in argument_information["value"]:
-                            current_argument += f" {argument}"
+                            argument_list.append(argument)
                     else:
-                        current_argument = argument_information["value"]
+                        argument_list.append(argument_information["value"])
                 else:
-                    current_argument = argument_information
-                game_argument += f" {current_argument}"
-            game_argument = game_argument.strip()
+                    argument_list.append(argument_information)
+
+            game_argument: str = " ".join(argument_list)
 
         return game_argument
 
@@ -282,7 +301,7 @@ class MinecraftLaunch:
         (self.temp_path / "launches" / "native_libraries" / self.version).mkdir(parents=True, exist_ok=True)
 
         for native_library in native_libraries:
-            with zipfile.ZipFile(native_library, 'r') as zip_ref:
+            with zipfile.ZipFile(native_library, "r") as zip_ref:
                 zip_ref.extractall(self.temp_path / "launches" / "native_libraries" / self.version)
 
         files: list[pathlib.Path] = []
@@ -292,7 +311,7 @@ class MinecraftLaunch:
             ".jnilib",
             ".dylib",
         ]
-        for path in (self.temp_path / "launches" / "native_libraries" / self.version).rglob('*'):
+        for path in (self.temp_path / "launches" / "native_libraries" / self.version).rglob("*"):
             if path.is_file():
                 if path.suffix in extensions:
                     files.append(path)

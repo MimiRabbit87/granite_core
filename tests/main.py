@@ -41,18 +41,26 @@ class Test(unittest.TestCase):
                 indent=2
             )
 
-    @unittest.skip
+    # @unittest.skip
     def test_launch(self) -> None:
         setting: granite_core.granite_settings.GraniteSettings = granite_core.granite_settings.GraniteSettings()
-        setting.current_version = "1.12.2"
+        setting.current_version = "1.16.5-Fabric 0.19.2"
+        setting.user_type = "msa"
+        setting.auth_player_name = "MimiRabbit87"
+        setting.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
+        # login: granite_core.account_login.AccountLogin = \
+        #     granite_core.account_login.AccountLogin(setting, self.thread_pool)
+        # login.login()
+        # setting.auth_access_token = login.task_queue.results['4']['Token']
         launcher: granite_core.minecraft_launch.MinecraftLaunch = granite_core.minecraft_launch.MinecraftLaunch(
             setting,
             self.thread_pool
         )
 
         launcher.launch()
+        self.thread_pool.shutdown()
 
-    # @unittest.skip
+    @unittest.skip
     def test_login(self) -> None:
         setting: granite_core.granite_settings.GraniteSettings = granite_core.granite_settings.GraniteSettings()
         login: granite_core.account_login.AccountLogin = \
