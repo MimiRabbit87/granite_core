@@ -12,9 +12,9 @@ import typing
 import requests.adapters
 import urllib3
 
-from . import granite_settings
-from . import task_queue
-from . import thread_pool
+from granite_core.concurrency import task_queue
+from granite_core.concurrency import thread_pool
+from granite_core.granite import granite_settings
 
 
 class MinecraftInstall:

@@ -9,7 +9,7 @@ import threading
 import traceback
 import typing
 
-from . import thread_pool
+from granite_core.concurrency import thread_pool
 
 
 class TaskQueue:
@@ -52,7 +52,7 @@ class TaskQueue:
         if "pre_tasks" in task:
             task["pre_tasks"] = [str(t) for t in task["pre_tasks"]]
 
-        with self.lock:
+        with self.condition:
             if task.get("pre_tasks"):  # Check if this task includes pre-tasks，然后什么什么 blabla 的
                 priority = task.get("priority", 0)
                 heapq.heappush(self.pending_tasks, (-priority, self.task_counter, task))

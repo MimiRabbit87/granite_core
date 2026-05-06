@@ -11,13 +11,13 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s][%(n
 class Test(unittest.TestCase):
     def setUp(self) -> None:
         self.logger: logging.Logger = logging.getLogger("Test")
-        self.thread_pool: granite_core.thread_pool.ThreadPool = granite_core.thread_pool.ThreadPool(max_workers=16)
+        self.thread_pool: granite_core.concurrency.thread_pool.ThreadPool = granite_core.concurrency.thread_pool.ThreadPool(max_workers=16)
 
     @unittest.skip
     def test_install(self) -> None:
-        setting: granite_core.granite_settings.GraniteSettings = granite_core.granite_settings.GraniteSettings()
-        installer: granite_core.minecraft_install.MinecraftInstall = (
-                granite_core.minecraft_install.MinecraftInstall(
+        setting: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
+        installer: granite_core.minecraft.minecraft_install.MinecraftInstall = (
+                granite_core.minecraft.minecraft_install.MinecraftInstall(
                 setting,
                 "1.12.2",
                 16,
@@ -41,9 +41,11 @@ class Test(unittest.TestCase):
                 indent=2
             )
 
-    # @unittest.skip
+        self.thread_pool.shutdown()
+
+    @unittest.skip
     def test_launch(self) -> None:
-        setting: granite_core.granite_settings.GraniteSettings = granite_core.granite_settings.GraniteSettings()
+        setting: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
         setting.current_version = "1.16.5-Fabric 0.19.2"
         setting.user_type = "msa"
         setting.auth_player_name = "MimiRabbit87"
@@ -52,19 +54,19 @@ class Test(unittest.TestCase):
         #     granite_core.account_login.AccountLogin(setting, self.thread_pool)
         # login.login()
         # setting.auth_access_token = login.task_queue.results['4']['Token']
-        launcher: granite_core.minecraft_launch.MinecraftLaunch = granite_core.minecraft_launch.MinecraftLaunch(
+        launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = granite_core.minecraft.minecraft_launch.MinecraftLaunch(
             setting,
             self.thread_pool
         )
 
-        launcher.launch()
+        launcher.generate_launch_argument()
         self.thread_pool.shutdown()
 
     @unittest.skip
     def test_login(self) -> None:
-        setting: granite_core.granite_settings.GraniteSettings = granite_core.granite_settings.GraniteSettings()
-        login: granite_core.account_login.AccountLogin = \
-            granite_core.account_login.AccountLogin(setting, self.thread_pool)
+        setting: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
+        login: granite_core.account.account_login.AccountLogin = \
+            granite_core.account.account_login.AccountLogin(setting, self.thread_pool)
         if login.login():
             self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['Token']}")
         else:
@@ -85,6 +87,24 @@ class Test(unittest.TestCase):
                 file,
                 indent=2
             )
+
+        self.thread_pool.shutdown()
+
+    @unittest.skip
+    def test_search_for_game_instance(self) -> None:
+        manager: granite_core.minecraft.minecraft_instance_manage.MinecraftInstanceManage = \
+            granite_core.minecraft.minecraft_instance_manage.MinecraftInstanceManage()
+        manager.search_for_game_instances()
+        self.logger.info(manager.external_instances_list)
+
+        self.thread_pool.shutdown()
+
+    # @unittest.skip
+    def test_search_for_java(self) -> None:
+        settings: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
+        manager: granite_core.java.java_manage.JavaManage = granite_core.java.java_manage.JavaManage(settings, self.thread_pool)
+
+        manager.search_for_java()
 
         self.thread_pool.shutdown()
 

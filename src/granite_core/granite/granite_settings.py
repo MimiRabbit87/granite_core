@@ -13,6 +13,7 @@ import platform
 @dataclasses.dataclass
 class GraniteSettings:
     logger: logging.Logger = logging.getLogger("Settings")
+
     system_name: str = dataclasses.field(
         init=False, default=platform.system().replace("Darwin", "osx").lower()
     )
@@ -32,6 +33,7 @@ class GraniteSettings:
         "-XX:-OmitStackTraceInFastThrow -Dfml.ignoreInvalidMinecraftCertificates=True "
         "-Dfml.ignorePatchDiscrepancies=True -Dlog4j2.formatMsgNoLookups=true"
     )
+
     is_demo_user: bool = False
     has_custom_resolution: bool = False
     has_quick_plays_support: bool = False

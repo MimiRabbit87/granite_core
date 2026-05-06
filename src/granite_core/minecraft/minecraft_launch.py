@@ -3,15 +3,16 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
 import pathlib
 import re
 import shutil
 import time
 import zipfile
 
-from . import granite_settings
-from . import task_queue
-from . import thread_pool
+from granite_core.concurrency import task_queue
+from granite_core.concurrency import thread_pool
+from granite_core.granite import granite_settings
 
 
 class MinecraftLaunch:
@@ -56,7 +57,7 @@ class MinecraftLaunch:
 
         self.version_metadata: dict = {}
 
-    def launch(self) -> int:
+    def generate_launch_argument(self) -> int:
         start_time: float = time.time()
 
         with open(self.working_path / "versions" / self.version / f"{self.version}.json") as file:
@@ -240,7 +241,7 @@ class MinecraftLaunch:
             self._unzip_native_libraries(native_libraries)
 
         libraries.append(str(self.working_path / "versions" / self.version / f"{self.version}.jar"))
-        classpath: str = ";".join(libraries) if self.system_name == "windows" else ":".join(libraries)
+        classpath: str = os.pathsep.join(libraries)
         classpath = f"\"{classpath}\""
 
         return classpath

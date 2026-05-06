@@ -13,6 +13,7 @@ dependencies = [
     "keyring",
     "requests",
     "urllib3",
+    "psutil",
     "pyperclip",
 ]
 classifiers = [
