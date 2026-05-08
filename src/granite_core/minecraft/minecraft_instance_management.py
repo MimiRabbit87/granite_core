@@ -1,3 +1,13 @@
+"""
+    Minecraft Instance Management: manages Minecraft instances.
+    Copyright (C) 2026 MimiRabbit
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -7,9 +17,9 @@ import subprocess
 import psutil
 
 
-class MinecraftInstanceManage:
+class MinecraftInstanceManagement:
     def __init__(self) -> None:
-        self.logger: logging.Logger = logging.getLogger("MinecraftInstanceManage")
+        self.logger: logging.Logger = logging.getLogger("MinecraftInstanceManagement")
         self.instance_list: list[subprocess.Popen] = []  # 由 Granite Core 直接启动的 Minecraft 实例 Popen 对象
         self.external_instances_list: list[psutil.Process] = []  # 由外部启动的疑似 Minecraft 实例进程 Process 对象
 

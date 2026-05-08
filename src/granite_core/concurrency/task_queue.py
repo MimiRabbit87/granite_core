@@ -1,4 +1,12 @@
 """
+    Task Queue: just an implement of a task queue.
+    Copyright (C) 2026 MimiRabbit
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
     这个任务队列太好用了你知道吗
 """
 

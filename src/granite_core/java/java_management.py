@@ -1,3 +1,13 @@
+"""
+    Java Management: manages Javas.
+    Copyright (C) 2026 MimiRabbit
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -9,9 +19,9 @@ from granite_core.concurrency import thread_pool
 from granite_core.granite import granite_settings
 
 
-class JavaManage:
+class JavaManagement:
     def __init__(self, settings: granite_settings.GraniteSettings, thread_pool_: thread_pool.ThreadPool) -> None:
-        self.logger: logging.Logger = logging.getLogger("JavaManage")
+        self.logger: logging.Logger = logging.getLogger("JavaManagement")
         self.settings: granite_settings.GraniteSettings = settings
         self.thread_pool: thread_pool.ThreadPool = thread_pool_
         self.java_list: dict[pathlib.Path, tuple[int, str]] = {}

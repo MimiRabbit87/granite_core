@@ -1,3 +1,15 @@
+"""
+    Main: the main file of unittest.
+    Copyright (C) 2026 MimiRabbit
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+"""
+
+from __future__ import annotations
+
 import json
 import logging
 
@@ -11,11 +23,13 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s][%(n
 class Test(unittest.TestCase):
     def setUp(self) -> None:
         self.logger: logging.Logger = logging.getLogger("Test")
-        self.thread_pool: granite_core.concurrency.thread_pool.ThreadPool = granite_core.concurrency.thread_pool.ThreadPool(max_workers=16)
+        self.thread_pool: granite_core.concurrency.thread_pool.ThreadPool = \
+            granite_core.concurrency.thread_pool.ThreadPool(max_workers=16)
 
     @unittest.skip
     def test_install(self) -> None:
-        setting: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
+        setting: granite_core.granite.granite_settings.GraniteSettings = \
+            granite_core.granite.granite_settings.GraniteSettings()
         installer: granite_core.minecraft.minecraft_install.MinecraftInstall = (
                 granite_core.minecraft.minecraft_install.MinecraftInstall(
                 setting,
@@ -45,7 +59,8 @@ class Test(unittest.TestCase):
 
     @unittest.skip
     def test_launch(self) -> None:
-        setting: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
+        setting: granite_core.granite.granite_settings.GraniteSettings = \
+            granite_core.granite.granite_settings.GraniteSettings()
         setting.current_version = "1.16.5-Fabric 0.19.2"
         setting.user_type = "msa"
         setting.auth_player_name = "MimiRabbit87"
@@ -54,17 +69,19 @@ class Test(unittest.TestCase):
         #     granite_core.account_login.AccountLogin(setting, self.thread_pool)
         # login.login()
         # setting.auth_access_token = login.task_queue.results['4']['Token']
-        launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = granite_core.minecraft.minecraft_launch.MinecraftLaunch(
-            setting,
-            self.thread_pool
-        )
+        launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = \
+            granite_core.minecraft.minecraft_launch.MinecraftLaunch(
+                setting,
+                self.thread_pool
+            )
 
         launcher.generate_launch_argument()
         self.thread_pool.shutdown()
 
     @unittest.skip
     def test_login(self) -> None:
-        setting: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
+        setting: granite_core.granite.granite_settings.GraniteSettings = \
+            granite_core.granite.granite_settings.GraniteSettings()
         login: granite_core.account.account_login.AccountLogin = \
             granite_core.account.account_login.AccountLogin(setting, self.thread_pool)
         if login.login():
@@ -92,8 +109,8 @@ class Test(unittest.TestCase):
 
     @unittest.skip
     def test_search_for_game_instance(self) -> None:
-        manager: granite_core.minecraft.minecraft_instance_manage.MinecraftInstanceManage = \
-            granite_core.minecraft.minecraft_instance_manage.MinecraftInstanceManage()
+        manager: granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
+            granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement()
         manager.search_for_game_instances()
         self.logger.info(manager.external_instances_list)
 
@@ -101,8 +118,10 @@ class Test(unittest.TestCase):
 
     # @unittest.skip
     def test_search_for_java(self) -> None:
-        settings: granite_core.granite.granite_settings.GraniteSettings = granite_core.granite.granite_settings.GraniteSettings()
-        manager: granite_core.java.java_manage.JavaManage = granite_core.java.java_manage.JavaManage(settings, self.thread_pool)
+        settings: granite_core.granite.granite_settings.GraniteSettings = \
+            granite_core.granite.granite_settings.GraniteSettings()
+        manager: granite_core.java.java_management.JavaManagement = \
+            granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
 
         manager.search_for_java()
 
