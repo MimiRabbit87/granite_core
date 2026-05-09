@@ -106,7 +106,7 @@ class MinecraftLaunch:
         }
 
         final_argument: str = \
-            f"{self.task_queue.results["0"]} {self.task_queue.results["2"]}".replace("${", "{")
+            f"{self.task_queue.results['0']} {self.task_queue.results['2']}".replace("${", "{")
         final_argument = final_argument.format(**replacements)
         self.logger.info(f"启动参数解析耗时 {time.time() - start_time:.3f}s")
         self.logger.info(final_argument)
@@ -182,7 +182,7 @@ class MinecraftLaunch:
                         argument_list.append(f"\"{argument}\"" if " " in argument else argument)
                 else:
                     argument_list.append(
-                        f"\"{argument_information["value"]}\""
+                        f"\"{argument_information['value']}\""
                         if " " in argument_information["value"]
                         else argument_information["value"]
                     )

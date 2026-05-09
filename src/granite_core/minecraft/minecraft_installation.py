@@ -197,10 +197,10 @@ class MinecraftInstallation:
     def download_game_asset_index(self) -> int:
         while True:
             if pathlib.Path.exists(
-                    self.install_main_path / "assets" / "indexes" / f"{self.version_metadata["assetIndex"]["id"]}.json"
+                    self.install_main_path / "assets" / "indexes" / f"{self.version_metadata['assetIndex']['id']}.json"
             ):
                     if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" /
-                                            f"{self.version_metadata["assetIndex"]["id"]}.json")
+                                            f"{self.version_metadata['assetIndex']['id']}.json")
                             == self.version_metadata["assetIndex"]["sha1"]):
                         self.logger.info("已有资源索引文件")
                         break
@@ -220,11 +220,11 @@ class MinecraftInstallation:
                 (self.install_main_path / "assets" / "indexes").mkdir(parents=True, exist_ok=True)
                 with open(
                         self.install_main_path / "assets" / "indexes" /
-                        f"{self.version_metadata["assetIndex"]["id"]}.json",
+                        f"{self.version_metadata['assetIndex']['id']}.json",
                         "w") as f:
                     json.dump(asset_index, f, indent=2)
 
-                self.logger.info(f"下载资源索引文件 {self.version_metadata["assetIndex"]["id"]} 成功")
+                self.logger.info(f"下载资源索引文件 {self.version_metadata['assetIndex']['id']} 成功")
 
             except Exception as e:
                 logging.error(f"下载资源索引文件失败: {e}")
@@ -235,7 +235,7 @@ class MinecraftInstallation:
 
     def download_game_assets(self) -> int:
         with open(self.install_main_path / "assets" / "indexes" /
-                  f"{self.version_metadata["assetIndex"]["id"]}.json") as f:
+                  f"{self.version_metadata['assetIndex']['id']}.json") as f:
             asset_index: dict = json.load(f)
         assets_info: tuple = tuple(asset_index["objects"].items())
         self.total_assets = len(asset_index["objects"])
@@ -272,7 +272,7 @@ class MinecraftInstallation:
                 "args": (
                     f"asset-downloading-worker-{i}",  # 给个 id，debug 用
                     f"{self.minecraft_assets_path[self.download_source]}/"
-                    f"{assets_info[i][1]["hash"][:2]}/{assets_info[i][1]['hash']}",  # 远端地址
+                    f"{assets_info[i][1]['hash'][:2]}/{assets_info[i][1]['hash']}",  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / assets_info[i][1]["hash"][:2],
                         (self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0]).parent,
@@ -324,7 +324,7 @@ class MinecraftInstallation:
 
                     self.install_queue.submit({
                         "id": f"library-downloading-worker-{i}",
-                        "description": f"下载游戏支持库 ({self.version_metadata["libraries"][i]['name']}) 的"
+                        "description": f"下载游戏支持库 ({self.version_metadata['libraries'][i]['name']}) 的"
                                        f"动态链接库文件 ({pathlib.Path(classifier['path']).name})",
                         "function": self._regular_download,
                         "args": (
