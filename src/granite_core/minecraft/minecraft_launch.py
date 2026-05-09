@@ -107,6 +107,7 @@ class MinecraftLaunch:
 
         final_argument: str = \
             f"{self.task_queue.results['0']} {self.task_queue.results['2']}".replace("${", "{")
+        print(final_argument)
         final_argument = final_argument.format(**replacements)
         self.logger.info(f"启动参数解析耗时 {time.time() - start_time:.3f}s")
         self.logger.info(final_argument)
@@ -171,7 +172,7 @@ class MinecraftLaunch:
             if type(argument_information) is dict:
                 is_eligible: bool = True
                 for rule in argument_information["rules"]:
-                    if not self._analysis_rules(rule):
+                    if not self._analyze_rules(rule):
                         is_eligible = False
                         break
                 if not is_eligible:
@@ -210,23 +211,34 @@ class MinecraftLaunch:
         )
 
         for library in self.version_metadata["libraries"]:
+            # 规则适用
             if "rules" in library:
-                for rule in library["rules"]:
-                    if not self._analysis_rules(rule):
-                        continue
+                is_enabled: bool = True
 
+                for rule in library["rules"]:
+                    if not self._analyze_rules(rule):
+                        is_enabled = False
+                        break
+
+                if not is_enabled:
+                    continue
+
+            # 动态链接库处理
             if "natives" in library:
                 classifier: dict = library["natives"].get(self.system_name)
                 if classifier and "downloads" in library and "classifiers" in library["downloads"]:
                     classifier_info: dict = library["downloads"]["classifiers"].get(classifier)
                     if classifier_info:
                         native_path = library_path / classifier_info["path"]
-                        libraries.append(str(native_path))
                         # < 1.19-pre1 需要解压，新版本不需要
                         if not is_new_style:
                             native_libraries.append(native_path)
+                        # >= 1.19-pre1 需要将动态链接库添加进类路径中，旧版本不需要
+                        else:
+                            libraries.append(str(native_path))
                 continue
 
+            # 普通库处理
             # 有 downloads.artifact.path 就用
             if "downloads" in library and "artifact" in library["downloads"]:
                 artifact_path: str = library["downloads"]["artifact"]["path"]
@@ -234,7 +246,7 @@ class MinecraftLaunch:
             else:
                 # 没就推导
                 parts: list[str] = library["name"].split(":")
-                if len(parts) >= 3:  # 表明了是动态链接库
+                if len(parts) == 3:  # 防止动态链接库进入，但动态链接库进入不太可能
                     (group, artifact, version) = (parts[0], parts[1], parts[2])
                     jar_name: str = f"{artifact}-{version}.jar"
                     rel_path: pathlib.Path = (
@@ -249,12 +261,13 @@ class MinecraftLaunch:
                     continue
             libraries.append(str(full_path))
 
+        # 主文件
         libraries.append(str(self.working_path / "versions" / self.version / f"{self.version}.jar"))
 
         if not is_new_style and native_libraries:
             self._unzip_native_libraries(native_libraries)
 
-        classpath: str = os.pathsep.join(libraries)
+        classpath: str = f"\"{os.pathsep.join(libraries)}\""
 
         return classpath
 
@@ -267,13 +280,14 @@ class MinecraftLaunch:
                 if "rules" in argument_information:
                     is_eligible: bool = True
                     for rule in argument_information["rules"]:
-                        if not self._analysis_rules(rule):
+                        if not self._analyze_rules(rule):
                             is_eligible: bool = False
                             break
                     if not is_eligible:
                         continue
-                if type(argument_information) is dict:
-                    if type(argument_information["value"]) is list:
+
+                if isinstance(argument_information, dict):
+                    if isinstance(argument_information["value"], list):
                         for argument in argument_information["value"]:
                             argument_list.append(argument)
                     else:
@@ -332,7 +346,7 @@ class MinecraftLaunch:
             shutil.copy2(file, self.natives_directory)
         shutil.rmtree(self.temp_path / "launches" / "native_libraries" / self.version)
 
-    def _analysis_rules(self, rules: dict) -> bool:
+    def _analyze_rules(self, rules: dict) -> bool:
         if not rules:
             return True
         is_eligible: bool = True
@@ -348,8 +362,8 @@ class MinecraftLaunch:
                 if not re.match(rules["os"]["arch"], self.system_architecture):
                     is_eligible = False
         elif "features" in rules.keys():
-            for i in range(len(rules["features"])):
-                if not getattr(self, tuple(rules["features"].keys())[i], False) == tuple(rules["features"].values())[i]:
+            for key, value in rules["features"].items():
+                if not getattr(self, key, False) == value:
                     is_eligible = False
 
         if is_eligible:

@@ -19,10 +19,12 @@ import unittest
 
 import granite_core  # 当当前工作目录为项目根目录时，运行 pip install -e .
 
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s][%(name)s]: %(message)s', encoding="utf-8")
-
 
 class Test(unittest.TestCase):
+    logging.basicConfig(
+        level=logging.INFO, format="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s", encoding="utf-8"
+    )
+
     def setUp(self) -> None:
         self.logger: logging.Logger = logging.getLogger("Test")
         self.thread_pool: concurrent.futures.ThreadPoolExecutor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
@@ -134,16 +136,19 @@ class Test(unittest.TestCase):
             settings: granite_core.granite.granite_settings.GraniteSettings = \
                 granite_core.granite.granite_settings.GraniteSettings()
 
-            settings.current_version = "1.21.11"
+            settings.current_version = "1.16.5-Fabric 0.19.2"
             settings.user_type = "msa"
             settings.auth_player_name = "MimiRabbit87"
             settings.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
 
-            java_manager: granite_core.java.java_management.JavaManagement = \
+            java_manager: granite_core.java.java_management.JavaManagement = (
                 granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
-            minecraft_instance_manager: \
-                granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
+            )
+            minecraft_instance_manager: (
+                granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement
+            ) = (
                 granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement()
+            )
 
             login: granite_core.account.account_login.AccountLogin = \
                 granite_core.account.account_login.AccountLogin(settings, self.thread_pool)
