@@ -62,11 +62,16 @@ class MinecraftInstanceManagement:
         instance: subprocess.Popen = subprocess.Popen(
             f"{java_path} {launch_argument}",
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             creationflags=subprocess.CREATE_NO_WINDOW,
-            shell=True,
-            text=True
+            text=True,
+            encoding="utf-8",
         )
         self.instance_list.append(instance)
 
         return instance
+
+    @staticmethod
+    def _read_stdout(instance: subprocess.Popen[str]) -> None:
+        for line in instance.stdout:
+            print(line, end="")

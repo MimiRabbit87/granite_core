@@ -32,7 +32,7 @@ class JavaManagement:
     def search_for_java_from_environment_variable(self) -> list[pathlib.Path]:
         java_path: list[pathlib.Path] = []
         path_dirs: list[str] = os.environ.get("PATH", "").split(os.pathsep)
-        pathext: list[str] = os.environ.get("PATHEXT", "").split(os.pathsep)
+        pathext: list[str] = os.environ.get("PATHEXT", "").lower().split(os.pathsep)
         suffixes: set[str] = set([""] + pathext)
 
         for dir_str in path_dirs:

@@ -185,25 +185,14 @@ class AccountLogin:
             return {}
 
         self.logger.info("微软账户登录流程五：获取 Minecraft 访问令牌")
-        headers: dict[str, str] = {
-            "identityToken": f"XBL3.0 x=<{self.task_queue.results['2']['DisplayClaims']['xui'][0]['uhs']}>;"
-                             f"<{self.task_queue.results['3']['Token']}>"
-        }
-
-        payload: dict[str, str] = {
-            "Properties": {
-                "SandboxId": "RETAIL",
-                "UserTokens": [
-                    self.task_queue.results["2"]["Token"]
-                ]
-            },
-            "RelyingParty": "rp://api.minecraftservices.com/",  # noqa
-            "TokenType": "JWT"
+        body: dict[str, str] = {
+            "identityToken": f"XBL3.0 x={self.task_queue.results['2']['DisplayClaims']['xui'][0]['uhs']};"
+                             f"{self.task_queue.results['3']['Token']}"
         }
 
         response = requests.post(
-            "https://xsts.auth.xboxlive.com/xsts/authorize",
-            headers=headers, json=payload
+            "https://api.minecraftservices.com/authentication/login_with_xbox",
+            json=body
         )
 
         return response.json()

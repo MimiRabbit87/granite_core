@@ -200,8 +200,8 @@ class MinecraftLaunch:
     def analyze_libraries(self) -> str:
         self.natives_directory.mkdir(parents=True, exist_ok=True)
         library_path: pathlib.Path = self.working_path / "libraries"
-        native_libraries: list = []
-        libraries: list = []
+        native_libraries: list[pathlib.Path] = []
+        libraries: list[str] = []
         # 1.19-pre1 的更改太大了，基本没法合并成一个逻辑
         if (datetime.datetime.fromisoformat(self.version_metadata["releaseTime"])
                 >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
@@ -209,9 +209,9 @@ class MinecraftLaunch:
                 current_library_maven: list[str] = library["name"].split(":")
                 current_library_path: pathlib.Path = \
                     pathlib.Path() / current_library_maven[0].replace(".", "/") / current_library_maven[1] / \
-                    current_library_maven[2] / f"{current_library_maven[1]}-{current_library_maven[2]}.jar"
+                    current_library_maven[2] / f"{'-'.join(current_library_maven[1:])}.jar"
 
-                if "rules" in library.keys():
+                if len(current_library_maven) == 4:
                     is_eligible: bool = True
                     for rule in library["rules"]:
                         if not self._analysis_rules(rule):
@@ -221,13 +221,13 @@ class MinecraftLaunch:
                         continue
                     native_libraries.append(library_path / current_library_path)
 
-                libraries.append(library_path / current_library_path)
+                libraries.append(str(library_path / current_library_path))
         else:
             for library in self.version_metadata["libraries"]:
                 current_library_maven: list[str] = library["name"].split(":")
                 current_library_path: pathlib.Path = \
                     pathlib.Path() / current_library_maven[0].replace(".", "/") / current_library_maven[1] / \
-                    current_library_maven[2] / f"{current_library_maven[1]}-{current_library_maven[2]}.jar"
+                    current_library_maven[2] / f"{'-'.join(current_library_maven[1:])}.jar"
 
                 if "rules" in library.keys():
                     is_eligible: bool = True
@@ -242,16 +242,17 @@ class MinecraftLaunch:
                         library_path /
                         library["downloads"]["classifiers"][library["natives"][self.system_name]]["path"]
                     ))
-                    native_libraries.append(str(
+                    native_libraries.append(
                         library_path /
                         library["downloads"]["classifiers"][library["natives"][self.system_name]]["path"]
-                    ))
+                    )
                 if "downloads" in library:
                     if "artifact" in library["downloads"].keys():
                         libraries.append(str(library_path / current_library_path))
                 else:
                     libraries.append(str(library_path / current_library_path))
-            self._unzip_native_libraries(native_libraries)
+
+        self._unzip_native_libraries(native_libraries)
 
         libraries.append(str(self.working_path / "versions" / self.version / f"{self.version}.jar"))
         classpath: str = os.pathsep.join(libraries)

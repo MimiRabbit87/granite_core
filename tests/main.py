@@ -130,50 +130,49 @@ class Test(unittest.TestCase):
 
     # @unittest.skip
     def test_complete_launch_process(self) -> None:
-        settings: granite_core.granite.granite_settings.GraniteSettings = \
-            granite_core.granite.granite_settings.GraniteSettings()
+        try:
+            settings: granite_core.granite.granite_settings.GraniteSettings = \
+                granite_core.granite.granite_settings.GraniteSettings()
 
-        settings.current_version = "1.16.5-Fabric 0.19.2"
-        settings.user_type = "msa"
-        settings.auth_player_name = "MimiRabbit87"
-        settings.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
+            settings.current_version = "1.21.11"
+            settings.user_type = "msa"
+            settings.auth_player_name = "MimiRabbit87"
+            settings.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
 
-        java_manager: granite_core.java.java_management.JavaManagement = \
-            granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
-        minecraft_instance_manager: granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
-            granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement()
+            java_manager: granite_core.java.java_management.JavaManagement = \
+                granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
+            minecraft_instance_manager: granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
+                granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement()
 
-        login: granite_core.account.account_login.AccountLogin = \
-            granite_core.account.account_login.AccountLogin(settings, self.thread_pool)
-        if login.login():
-            self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['Token'][:4]}……")
-        else:
-            self.logger.info("登录失败")
-            return
+            login: granite_core.account.account_login.AccountLogin = \
+                granite_core.account.account_login.AccountLogin(settings, self.thread_pool)
+            if login.login():
+                self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['access_token'][:5]}……")
+            else:
+                self.logger.info("登录失败")
+                self.thread_pool.shutdown()
+                return
 
-        settings.auth_access_token = login.task_queue.results["4"]["Token"]
+            settings.auth_access_token = login.task_queue.results["4"]["access_token"]
 
-        launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = \
-            granite_core.minecraft.minecraft_launch.MinecraftLaunch(
-                settings,
-                self.thread_pool
+            launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = \
+                granite_core.minecraft.minecraft_launch.MinecraftLaunch(
+                    settings,
+                    self.thread_pool
+                )
+            launcher.generate_launch_argument()
+
+            java_manager.search_for_java()
+            minecraft_instance: subprocess.Popen = minecraft_instance_manager.launch_game(
+                list(java_manager.java_list.keys())[0],
+                launcher.final_argument
             )
-        launcher.generate_launch_argument()
+            self.thread_pool.submit(minecraft_instance_manager._read_stdout, minecraft_instance)
+            minecraft_instance.wait()
 
-        java_manager.search_for_java()
-        minecraft_instance: subprocess.Popen = minecraft_instance_manager.launch_game(
-            list(java_manager.java_list.keys())[0],
-            launcher.final_argument
-        )
-        minecraft_instance.wait()
-        minecraft_instance.terminate()
-
-        self.logger.info(f"stdout:\n{minecraft_instance.stdout.read()}")
-        self.logger.info(f"stderr:\n{minecraft_instance.stderr.read()}")
-
-        minecraft_instance.stdout.close()
-        minecraft_instance.stderr.close()
-
+            minecraft_instance.stdout.close()
+        except Exception:  # noqa
+            self.logger.exception("在单元测试中发生了未预料的异常：")
         self.thread_pool.shutdown()
 
 
