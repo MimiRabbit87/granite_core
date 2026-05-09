@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import json
 import logging
@@ -23,7 +24,6 @@ import requests.adapters
 import urllib3
 
 from granite_core.concurrency import task_queue
-from granite_core.concurrency import thread_pool
 from granite_core.granite import granite_settings
 
 
@@ -33,7 +33,7 @@ class MinecraftInstall:
             settings: granite_settings.GraniteSettings,
             install_version: str,
             max_workers: int,
-            thread_pool_: thread_pool.ThreadPool
+            thread_pool_: concurrent.futures.ThreadPoolExecutor
     ) -> None:
         # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -146,7 +146,7 @@ class MinecraftInstall:
             return -1
 
         for i in range(len(file_chunked)):
-            self.install_queue.add_task({
+            self.install_queue.submit({
                 "id": f"main-file-worker-{i}",
                 "description": f"下载游戏主文件的 ({file_chunked[i]})",
                 "function": self._download_chunk,
@@ -265,7 +265,7 @@ class MinecraftInstall:
                     self.installed_assets += 1
                     continue
 
-            self.install_queue.add_task({
+            self.install_queue.submit({
                 "id": f"asset-downloading-worker-{i}",
                 "description": f"下载游戏资源文件的 ({assets_info[i][0]}, {assets_info[i][1]['hash']})",
                 "function": self._regular_download,
@@ -322,7 +322,7 @@ class MinecraftInstall:
                             self.installed_libraries += 1
                             continue
 
-                    self.install_queue.add_task({
+                    self.install_queue.submit({
                         "id": f"library-downloading-worker-{i}",
                         "description": f"下载游戏支持库 ({self.version_metadata["libraries"][i]['name']}) 的"
                                        f"动态链接库文件 ({pathlib.Path(classifier['path']).name})",
@@ -359,7 +359,7 @@ class MinecraftInstall:
                         self.installed_libraries += 1
                         continue
 
-                self.install_queue.add_task({
+                self.install_queue.submit({
                     "id": f"library-downloading-worker-{i}",
                     "description": f"下载游戏支持库文件的 ({self.version_metadata['libraries'][i]['name']})",
                     "function": self._regular_download,
@@ -394,21 +394,21 @@ class MinecraftInstall:
 
     def _retry_download_game_resources(self, task: dict[str, ...]) -> int:
         def retry() -> int:
-            self.install_queue.add_task(task)
+            self.install_queue.submit(task)
             return 0
 
         return retry()
 
     def _install_tasks_init(self) -> int:
         # 要开始了哦
-        self.install_queue.add_task({
+        self.install_queue.submit({
             "id": "0",
             "description": "下载版本清单文件",
             "function": self.download_manifest,
             "args": (),
             "priority": 10
         })
-        self.install_queue.add_task({
+        self.install_queue.submit({
             "id": "1",
             "description": "下载游戏元数据",
             "function": self.download_version_metadata,
@@ -416,7 +416,7 @@ class MinecraftInstall:
             "pre_tasks": ["0"],
             "priority": 10
         })
-        self.install_queue.add_task({
+        self.install_queue.submit({
             "id": "2",
             "description": "下载游戏主文件",
             "function": self.download_game_main_file,
@@ -424,7 +424,7 @@ class MinecraftInstall:
             "pre_tasks": ["1"],
             "priority": 10
         })
-        self.install_queue.add_task({
+        self.install_queue.submit({
             "id": "3",
             "description": "下载游戏资源索引文件",
             "function": self.download_game_asset_index,
@@ -432,7 +432,7 @@ class MinecraftInstall:
             "pre_tasks": ["1"],
             "priority": 10
         })
-        self.install_queue.add_task({
+        self.install_queue.submit({
             "id": "4",
             "description": "下载游戏资源文件",
             "function": self.download_game_assets,
@@ -440,7 +440,7 @@ class MinecraftInstall:
             "pre_tasks": ["3"],
             "priority": 10
         })
-        self.install_queue.add_task({
+        self.install_queue.submit({
             "id": "5",
             "description": "下载游戏支持库文件",
             "function": self.download_game_libraries,

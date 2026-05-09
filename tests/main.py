@@ -10,8 +10,10 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
+import subprocess
 
 import unittest
 
@@ -23,16 +25,15 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(levelname)s][%(n
 class Test(unittest.TestCase):
     def setUp(self) -> None:
         self.logger: logging.Logger = logging.getLogger("Test")
-        self.thread_pool: granite_core.concurrency.thread_pool.ThreadPool = \
-            granite_core.concurrency.thread_pool.ThreadPool(max_workers=16)
+        self.thread_pool: concurrent.futures.ThreadPoolExecutor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
 
     @unittest.skip
     def test_install(self) -> None:
-        setting: granite_core.granite.granite_settings.GraniteSettings = \
+        settings: granite_core.granite.granite_settings.GraniteSettings = \
             granite_core.granite.granite_settings.GraniteSettings()
         installer: granite_core.minecraft.minecraft_install.MinecraftInstall = (
                 granite_core.minecraft.minecraft_install.MinecraftInstall(
-                setting,
+                settings,
                 "1.12.2",
                 16,
                 self.thread_pool
@@ -59,19 +60,19 @@ class Test(unittest.TestCase):
 
     @unittest.skip
     def test_launch(self) -> None:
-        setting: granite_core.granite.granite_settings.GraniteSettings = \
+        settings: granite_core.granite.granite_settings.GraniteSettings = \
             granite_core.granite.granite_settings.GraniteSettings()
-        setting.current_version = "1.16.5-Fabric 0.19.2"
-        setting.user_type = "msa"
-        setting.auth_player_name = "MimiRabbit87"
-        setting.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
+        settings.current_version = "1.16.5-Fabric 0.19.2"
+        settings.user_type = "msa"
+        settings.auth_player_name = "MimiRabbit87"
+        settings.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
         # login: granite_core.account_login.AccountLogin = \
-        #     granite_core.account_login.AccountLogin(setting, self.thread_pool)
+        #     granite_core.account_login.AccountLogin(settings, self.thread_pool)
         # login.login()
-        # setting.auth_access_token = login.task_queue.results['4']['Token']
+        # settings.auth_access_token = login.task_queue.results['4']['Token']
         launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = \
             granite_core.minecraft.minecraft_launch.MinecraftLaunch(
-                setting,
+                settings,
                 self.thread_pool
             )
 
@@ -80,12 +81,12 @@ class Test(unittest.TestCase):
 
     @unittest.skip
     def test_login(self) -> None:
-        setting: granite_core.granite.granite_settings.GraniteSettings = \
+        settings: granite_core.granite.granite_settings.GraniteSettings = \
             granite_core.granite.granite_settings.GraniteSettings()
         login: granite_core.account.account_login.AccountLogin = \
-            granite_core.account.account_login.AccountLogin(setting, self.thread_pool)
+            granite_core.account.account_login.AccountLogin(settings, self.thread_pool)
         if login.login():
-            self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['Token']}")
+            self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['Token'][:4]}……")
         else:
             self.logger.info("登录失败")
 
@@ -116,7 +117,7 @@ class Test(unittest.TestCase):
 
         self.thread_pool.shutdown()
 
-    # @unittest.skip
+    @unittest.skip
     def test_search_for_java(self) -> None:
         settings: granite_core.granite.granite_settings.GraniteSettings = \
             granite_core.granite.granite_settings.GraniteSettings()
@@ -124,6 +125,54 @@ class Test(unittest.TestCase):
             granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
 
         manager.search_for_java()
+
+        self.thread_pool.shutdown()
+
+    # @unittest.skip
+    def test_complete_launch_process(self) -> None:
+        settings: granite_core.granite.granite_settings.GraniteSettings = \
+            granite_core.granite.granite_settings.GraniteSettings()
+
+        settings.current_version = "1.16.5-Fabric 0.19.2"
+        settings.user_type = "msa"
+        settings.auth_player_name = "MimiRabbit87"
+        settings.auth_uuid = "f008073df78f464ea3a986f0d88d1f28"
+
+        java_manager: granite_core.java.java_management.JavaManagement = \
+            granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
+        minecraft_instance_manager: granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
+            granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement()
+
+        login: granite_core.account.account_login.AccountLogin = \
+            granite_core.account.account_login.AccountLogin(settings, self.thread_pool)
+        if login.login():
+            self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['Token'][:4]}……")
+        else:
+            self.logger.info("登录失败")
+            return
+
+        settings.auth_access_token = login.task_queue.results["4"]["Token"]
+
+        launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = \
+            granite_core.minecraft.minecraft_launch.MinecraftLaunch(
+                settings,
+                self.thread_pool
+            )
+        launcher.generate_launch_argument()
+
+        java_manager.search_for_java()
+        minecraft_instance: subprocess.Popen = minecraft_instance_manager.launch_game(
+            list(java_manager.java_list.keys())[0],
+            launcher.final_argument
+        )
+        minecraft_instance.wait()
+        minecraft_instance.terminate()
+
+        self.logger.info(f"stdout:\n{minecraft_instance.stdout.read()}")
+        self.logger.info(f"stderr:\n{minecraft_instance.stderr.read()}")
+
+        minecraft_instance.stdout.close()
+        minecraft_instance.stderr.close()
 
         self.thread_pool.shutdown()
 

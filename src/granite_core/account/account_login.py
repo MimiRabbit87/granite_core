@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import time
 import webbrowser
@@ -18,12 +19,15 @@ import pyperclip
 import requests
 
 from granite_core.concurrency import task_queue
-from granite_core.concurrency import thread_pool
 from granite_core.granite import granite_settings
 
 
 class AccountLogin:
-    def __init__(self, settings: granite_settings.GraniteSettings, thread_pool_: thread_pool.ThreadPool) -> None:
+    def __init__(
+            self,
+            settings: granite_settings.GraniteSettings,
+            thread_pool_: concurrent.futures.ThreadPoolExecutor
+    ) -> None:
         self.logger: logging.Logger = logging.getLogger("Login")
         self.running_flag: bool = True
         self.settings: granite_settings.GraniteSettings = settings
@@ -205,14 +209,14 @@ class AccountLogin:
         return response.json()
 
     def _login_tasks_init(self) -> None:
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "0",
             "description": "获取代码对",
             "function": self.msa_get_device_code,
             "args": (),
             "priority": 10
         })
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "1",
             "description": "获取用户授权状态",
             "function": self.msa_get_user_authorization_status,
@@ -220,7 +224,7 @@ class AccountLogin:
             "pre_tasks": ["0"],
             "priority": 10
         })
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "2",
             "description": "Xbox Live 身份验证",
             "function": self.msa_xbox_live_authorize,
@@ -228,7 +232,7 @@ class AccountLogin:
             "pre_tasks": ["1"],
             "priority": 10
         })
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "3",
             "description": "XSTS 身份验证",  # noqa
             "function": self.msa_xsts_authorize,
@@ -236,7 +240,7 @@ class AccountLogin:
             "pre_tasks": ["2"],
             "priority": 10
         })
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "4",
             "description": "获取 Minecraft 访问令牌",
             "function": self.msa_get_game_access_token,

@@ -64,7 +64,8 @@ class MinecraftInstanceManagement:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW,
-            shell=True
+            shell=True,
+            text=True
         )
         self.instance_list.append(instance)
 

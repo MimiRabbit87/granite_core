@@ -10,20 +10,23 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import pathlib
 import os
 import subprocess
 
-from granite_core.concurrency import thread_pool
 from granite_core.granite import granite_settings
 
 
 class JavaManagement:
-    def __init__(self, settings: granite_settings.GraniteSettings, thread_pool_: thread_pool.ThreadPool) -> None:
+    def __init__(
+            self,
+            settings: granite_settings.GraniteSettings,
+            thread_pool_: concurrent.futures.ThreadPoolExecutor) -> None:
         self.logger: logging.Logger = logging.getLogger("JavaManagement")
         self.settings: granite_settings.GraniteSettings = settings
-        self.thread_pool: thread_pool.ThreadPool = thread_pool_
+        self.thread_pool: concurrent.futures.ThreadPoolExecutor = thread_pool_
         self.java_list: dict[pathlib.Path, tuple[int, str]] = {}
 
     def search_for_java_from_environment_variable(self) -> list[pathlib.Path]:
@@ -50,8 +53,11 @@ class JavaManagement:
 
         possible_java_path += self.search_for_java_from_environment_variable()
 
-        for java in possible_java_path:
-            self.thread_pool.submit(self.is_java_executable, (java,))
+        futures: list[concurrent.futures.Future[None]] = \
+            [self.thread_pool.submit(self.is_java_executable, java) for java in possible_java_path]
+
+        for future in futures:
+            future.result()
 
     def is_java_executable(self, java_path: pathlib.Path) -> None:
         instance: subprocess.CompletedProcess = subprocess.run(

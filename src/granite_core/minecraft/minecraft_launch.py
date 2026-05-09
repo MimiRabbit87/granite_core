@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import datetime
 import json
 import logging
@@ -21,51 +22,51 @@ import time
 import zipfile
 
 from granite_core.concurrency import task_queue
-from granite_core.concurrency import thread_pool
 from granite_core.granite import granite_settings
 
 
 class MinecraftLaunch:
     def __init__(
             self,
-            setting: granite_settings.GraniteSettings,
-            thread_pool_: thread_pool.ThreadPool
+            settings: granite_settings.GraniteSettings,
+            thread_pool_: concurrent.futures.ThreadPoolExecutor
     ) -> None:
         self.logger: logging.Logger = logging.getLogger("Launch")
         self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(3, thread_pool_)
 
-        self.natives_directory: pathlib.Path = (setting.working_path / "versions" / setting.current_version /
-                                                f"{setting.current_version}-natives")
+        self.natives_directory: pathlib.Path = (settings.working_path / "versions" / settings.current_version /
+                                                f"{settings.current_version}-natives")
         self.launcher_name: str = "Granite"
         self.launcher_version: str = "114514"
         self.classpath: str = ""
 
-        self.temp_path: pathlib.Path = setting.temp_path
-        self.system_name: str = setting.system_name
-        self.system_version: str = setting.system_version
-        self.system_architecture: str = setting.system_architecture
-        self.working_path: pathlib.Path = setting.working_path
-        self.version: str = setting.current_version
-        self.jvm_argument_head: str = setting.jvm_argument_head
-        self.is_demo_user: bool = setting.is_demo_user
-        self.has_custom_resolution: bool = setting.has_custom_resolution
-        self.has_quick_plays_support: bool = setting.has_quick_plays_support
-        self.is_quick_play_singleplayer: bool = setting.is_quick_play_singleplayer
-        self.is_quick_play_multiplayer: bool = setting.is_quick_play_multiplayer
-        self.is_quick_play_realms: bool = setting.is_quick_play_realms
-        self.maximum_heap_size: int = setting.maximum_heap_size
-        self.initial_heap_size: int = setting.initial_heap_size
-        self.auth_player_name: str = setting.auth_player_name
-        self.auth_uuid: str = setting.auth_uuid
-        self.auth_access_token: str = setting.auth_access_token
-        self.user_type: str = setting.user_type
-        self.quick_play_path: pathlib.Path = setting.quick_play_path if setting.quick_play_path is not None \
-            else setting.working_path / "quickPlay" / "log.json"
-        self.quick_play_singleplayer: str = setting.quick_play_singleplayer
-        self.quick_play_multiplayer: str = setting.quick_play_multiplayer
-        self.quick_play_realms: str = setting.quick_play_realms
+        self.temp_path: pathlib.Path = settings.temp_path
+        self.system_name: str = settings.system_name
+        self.system_version: str = settings.system_version
+        self.system_architecture: str = settings.system_architecture
+        self.working_path: pathlib.Path = settings.working_path
+        self.version: str = settings.current_version
+        self.jvm_argument_head: str = settings.jvm_argument_head
+        self.is_demo_user: bool = settings.is_demo_user
+        self.has_custom_resolution: bool = settings.has_custom_resolution
+        self.has_quick_plays_support: bool = settings.has_quick_plays_support
+        self.is_quick_play_singleplayer: bool = settings.is_quick_play_singleplayer
+        self.is_quick_play_multiplayer: bool = settings.is_quick_play_multiplayer
+        self.is_quick_play_realms: bool = settings.is_quick_play_realms
+        self.maximum_heap_size: int = settings.maximum_heap_size
+        self.initial_heap_size: int = settings.initial_heap_size
+        self.auth_player_name: str = settings.auth_player_name
+        self.auth_uuid: str = settings.auth_uuid
+        self.auth_access_token: str = settings.auth_access_token
+        self.user_type: str = settings.user_type
+        self.quick_play_path: pathlib.Path = settings.quick_play_path if settings.quick_play_path is not None \
+            else settings.working_path / "quickPlay" / "log.json"
+        self.quick_play_singleplayer: str = settings.quick_play_singleplayer
+        self.quick_play_multiplayer: str = settings.quick_play_multiplayer
+        self.quick_play_realms: str = settings.quick_play_realms
 
         self.version_metadata: dict = {}
+        self.final_argument: str = ""
 
     def generate_launch_argument(self) -> int:
         start_time: float = time.time()
@@ -103,11 +104,13 @@ class MinecraftLaunch:
             "quickPlayMultiplayer": self.quick_play_multiplayer,
             "quickPlayRealms": self.quick_play_realms,
         }
+
         final_argument: str = \
             f"{self.task_queue.results["0"]} {self.task_queue.results["2"]}".replace("${", "{")
         final_argument = final_argument.format(**replacements)
         self.logger.info(f"启动参数解析耗时 {time.time() - start_time:.3f}s")
         self.logger.info(final_argument)
+        self.final_argument = final_argument
 
         return 0
 
@@ -284,21 +287,21 @@ class MinecraftLaunch:
         return game_argument
 
     def _launch_tasks_init(self) -> None:
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "0",
             "description": "解析 JVM 参数",
             "function": self.analyze_jvm_argument,
             "args": (),
             "priority": 10
         })
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "1",
             "description": "解析支持库",
             "function": self.analyze_libraries,
             "args": (),
             "priority": 10
         })
-        self.task_queue.add_task({
+        self.task_queue.submit({
             "id": "2",
             "description": "解析游戏参数",
             "function": self.analyze_game_argument,
