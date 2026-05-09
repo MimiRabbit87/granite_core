@@ -239,7 +239,7 @@ class MinecraftLaunch:
                     jar_name: str = f"{artifact}-{version}.jar"
                     rel_path: pathlib.Path = (
                             pathlib.Path()
-                            / group.replace('.', '/')
+                            / group.replace(".", "/")
                             / artifact
                             / version
                             / jar_name

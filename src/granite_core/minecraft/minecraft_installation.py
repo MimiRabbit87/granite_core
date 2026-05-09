@@ -128,10 +128,10 @@ class MinecraftInstallation:
             self.install_running_flag = False
             return -1
 
-        if pathlib.Path.exists(self.install_main_path / "versions" /
-                               self.install_version / f"{self.install_version}.jar"):
-                if (self._get_file_sha1(self.install_main_path / "versions" /
-                                        self.install_version / f"{self.install_version}.jar")
+        if pathlib.Path.exists(self.install_main_path / "versions"
+                               / self.install_version / f"{self.install_version}.jar"):
+                if (self._get_file_sha1(self.install_main_path / "versions"
+                                        / self.install_version / f"{self.install_version}.jar")
                         == self.version_metadata["downloads"]["client"]["sha1"]):
                     self.logger.info("已存在主文件")
                     return 0
@@ -155,9 +155,9 @@ class MinecraftInstallation:
                     self.version_metadata["downloads"]["client"]["url"] if self.download_source == "Mojang"
                     else self.version_metadata["downloads"]["client"]["url"]
                     .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # 远端地址  # noqa
-                    self.temp_path / "downloads" /
-                    self.version_metadata["downloads"]["client"]["sha1"][:2] /
-                    self.version_metadata["downloads"]["client"]["sha1"],  # 下载块路径
+                    self.temp_path / "downloads"
+                    / self.version_metadata["downloads"]["client"]["sha1"][:2]
+                    / self.version_metadata["downloads"]["client"]["sha1"],  # 下载块路径
                     f"{str(i)}.tmp",  # 下载块文件名
                     file_chunked[i][0], file_chunked[i][1]  # 下载块起始
                 ),  # 好长一条参数
@@ -170,25 +170,27 @@ class MinecraftInstallation:
             with open(self.install_main_path / "versions" / self.install_version / f"{self.install_version}.jar",
                       "wb+") as f:
                 for downloaded_chunk in range(len(file_chunked)):
-                    with open(self.temp_path / "downloads" /
-                              self.version_metadata["downloads"]["client"]["sha1"][:2] /
-                              self.version_metadata["downloads"]["client"]["sha1"] /
-                              f"{str(downloaded_chunk)}.tmp", "rb") as tmp:
+                    with open(self.temp_path / "downloads"
+                              / self.version_metadata["downloads"]["client"]["sha1"][:2]
+                              / self.version_metadata["downloads"]["client"]["sha1"]
+                              / f"{str(downloaded_chunk)}.tmp", "rb") as tmp:
                         f.write(tmp.read())
             # 只是删个缓存，希望不要出什么 bug
             shutil.rmtree(
-                self.temp_path / "downloads" / self.version_metadata["downloads"]["client"]["sha1"][:2])
+                self.temp_path / "downloads" / self.version_metadata["downloads"]["client"]["sha1"][:2]
+            )
         else:
             self.logger.info("主文件下载失败，下载任务结束，等待其余线程完成执行，结果弃置")
             self.install_running_flag = False
             return False
 
         # 校验散列值
-        if (self._get_file_sha1(self.install_main_path / "versions" /
-                                self.install_version / f"{self.install_version}.jar")
+        if (self._get_file_sha1(self.install_main_path / "versions"
+                                / self.install_version / f"{self.install_version}.jar")
                 != self.version_metadata["downloads"]["client"]["sha1"]):
             self.logger.info(
-                f"主文件散列值校验失败，已下载主文件散列值为 {hashlib.sha1(f.read()).hexdigest()}")
+                f"主文件散列值校验失败，已下载主文件散列值为 {hashlib.sha1(f.read()).hexdigest()}"
+            )
             return -1
 
         self.logger.info("版本主文件下载完成")
@@ -199,8 +201,8 @@ class MinecraftInstallation:
             if pathlib.Path.exists(
                     self.install_main_path / "assets" / "indexes" / f"{self.version_metadata['assetIndex']['id']}.json"
             ):
-                    if (self._get_file_sha1(self.install_main_path / "assets" / "indexes" /
-                                            f"{self.version_metadata['assetIndex']['id']}.json")
+                    if (self._get_file_sha1(self.install_main_path / "assets" / "indexes"
+                                            / f"{self.version_metadata['assetIndex']['id']}.json")
                             == self.version_metadata["assetIndex"]["sha1"]):
                         self.logger.info("已有资源索引文件")
                         break
@@ -211,16 +213,18 @@ class MinecraftInstallation:
                                   "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
                                   "Chrome/91.0.4472.124 Safari/537.36"
                 }
-                asset_index: dict = json.loads(requests.request(
+                asset_index: dict = requests.request(
                     "GET",
                     self.version_metadata["assetIndex"]["url"] if self.download_source == "Mojang"
                     else self.version_metadata["assetIndex"]["url"].replace("piston-meta.mojang.com",
                                                                             "bmclapi2.bangbang93.com"),  # noqa
-                    headers=headers, timeout=60).text)
+                    headers=headers,
+                    timeout=60
+                ).json()
                 (self.install_main_path / "assets" / "indexes").mkdir(parents=True, exist_ok=True)
                 with open(
-                        self.install_main_path / "assets" / "indexes" /
-                        f"{self.version_metadata['assetIndex']['id']}.json",
+                        self.install_main_path / "assets" / "indexes"
+                        / f"{self.version_metadata['assetIndex']['id']}.json",
                         "w") as f:
                     json.dump(asset_index, f, indent=2)
 
@@ -238,29 +242,30 @@ class MinecraftInstallation:
                   f"{self.version_metadata['assetIndex']['id']}.json") as f:
             asset_index: dict = json.load(f)
         assets_info: tuple = tuple(asset_index["objects"].items())
-        self.total_assets = len(asset_index["objects"])
+        self.total_assets: int = len(asset_index["objects"])
         assets_level: int = 0
         assets_range: int = 0
-        progress_updater: threading.Thread = (
-            threading.Thread(target=self._print_progress,
-            args=("资源文件下载进度", self.total_assets, self._get_assets_progress)))  # 加个进度条
+        progress_updater: threading.Thread = threading.Thread(
+            target=self._print_progress,
+            args=("资源文件下载进度", self.total_assets, self._get_assets_progress)
+        )  # 加个进度条
         progress_updater.start()
 
         for i in range(len(asset_index["objects"])):
             if (
-                    pathlib.Path.exists(self.install_main_path / "assets" / "objects" /
-                                        assets_info[i][1]["hash"][:2] / assets_info[i][1]["hash"])
+                    pathlib.Path.exists(self.install_main_path / "assets" / "objects"
+                                        / assets_info[i][1]["hash"][:2] / assets_info[i][1]["hash"])
                 and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0])
                 and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "pre-1.6" / assets_info[i][0])
             ):
                 if (
-                        self._get_file_sha1(self.install_main_path / "assets" / "objects" /
-                                            assets_info[i][1]["hash"][:2] / assets_info[i][1]["hash"])
+                        self._get_file_sha1(self.install_main_path / "assets" / "objects"
+                                            / assets_info[i][1]["hash"][:2] / assets_info[i][1]["hash"])
                         == assets_info[i][1]["hash"]
-                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual" /
-                                            "legacy" / assets_info[i][0]) == assets_info[i][1]["hash"]
-                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual" /
-                                            "pre-1.6" / assets_info[i][0]) == assets_info[i][1]["hash"]
+                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual"
+                                            / "legacy" / assets_info[i][0]) == assets_info[i][1]["hash"]
+                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual"
+                                            / "pre-1.6" / assets_info[i][0]) == assets_info[i][1]["hash"]
                 ):
                     self.installed_assets += 1
                     continue
@@ -308,9 +313,11 @@ class MinecraftInstallation:
                 self.total_libraries += 1
         libraries_level: int = 0
         libraries_range: int = 0
-        progress_updater: threading.Thread =\
-            threading.Thread(target=self._print_progress,
-            args=("支持库文件下载进度", self.total_libraries, self._get_libraries_progress))  # 加个进度条
+        progress_updater: threading.Thread = threading.Thread(
+            target=self._print_progress,
+            args=("支持库文件下载进度",
+                  self.total_libraries, self._get_libraries_progress)
+        )  # 加个进度条
         progress_updater.start()
 
         for i in range(len(self.version_metadata["libraries"])):
@@ -334,8 +341,7 @@ class MinecraftInstallation:
                             else classifier["url"].replace("https://libraries.minecraft.net",
                                                            "https://bmclapi2.bangbang93.com/maven"),
                             # 下载支持库文件路径
-                            [(self.install_main_path / "libraries" /
-                              classifier["path"]).parent],
+                            [(self.install_main_path / "libraries" / classifier["path"]).parent],
                             # 下载支持库文件名
                             [pathlib.Path(classifier["path"]).name],
                             # 散列值
@@ -345,16 +351,17 @@ class MinecraftInstallation:
                         "callback_args": (
                             f"library-downloading-worker-{i}",
                             {**classifier, "name": self.version_metadata["libraries"][i]["name"]},
-                            True),
+                            True
+                        ),
                         "max_retries": 3,
                         "priority": 11
                     })
                     libraries_range += len(classifier)
             else:
-                if pathlib.Path.exists(self.install_main_path / "libraries" /
-                                       self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]):
-                    if (self._get_file_sha1(self.install_main_path / "libraries" /
-                                            self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"])
+                if pathlib.Path.exists(self.install_main_path / "libraries"
+                                       / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]):
+                    if (self._get_file_sha1(self.install_main_path / "libraries"
+                                            / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"])
                             == self.version_metadata["libraries"][i]["downloads"]["artifact"]["sha1"]):
                         self.installed_libraries += 1
                         continue
@@ -371,8 +378,8 @@ class MinecraftInstallation:
                         else self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"]
                         .replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
                         # 下载支持库文件路径
-                        [(self.install_main_path / "libraries" /
-                          self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).parent],
+                        [(self.install_main_path / "libraries"
+                          / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).parent],
                         # 下载支持库文件名
                         [pathlib.Path(self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).name],
                         # 散列值
@@ -645,8 +652,8 @@ class MinecraftInstallation:
                         library_data["downloads"]["artifact"]["url"] if self.download_source == "BMCLAPI"  # noqa
                         else library_data["downloads"]["artifact"]["url"]
                         .replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),  # 远端地址
-                        [(self.install_main_path / "libraries" /
-                          library_data["downloads"]["artifact"]["path"]).parent],  # 下载资源文件路径
+                        [(self.install_main_path / "libraries"
+                          / library_data["downloads"]["artifact"]["path"]).parent],  # 下载资源文件路径
                         [pathlib.Path(library_data["downloads"]["artifact"]["path"]).name],  # 下载资源文件名
                         library_data["downloads"]["artifact"]["sha1"]  # 散列值
                     ),  # 好长一参数

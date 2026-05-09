@@ -23,7 +23,8 @@ class JavaManagement:
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
-            thread_pool_: concurrent.futures.ThreadPoolExecutor) -> None:
+            thread_pool_: concurrent.futures.ThreadPoolExecutor
+    ) -> None:
         self.logger: logging.Logger = logging.getLogger("JavaManagement")
         self.settings: granite_settings.GraniteSettings = settings
         self.thread_pool: concurrent.futures.ThreadPoolExecutor = thread_pool_
