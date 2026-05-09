@@ -18,6 +18,7 @@ import os
 import pathlib
 import re
 import shutil
+import string
 import time
 import zipfile
 
@@ -34,8 +35,9 @@ class MinecraftLaunch:
         self.logger: logging.Logger = logging.getLogger("Launch")
         self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(3, thread_pool_)
 
-        self.natives_directory: pathlib.Path = (settings.working_path / "versions" / settings.current_version /
-                                                f"{settings.current_version}-natives")
+        self.natives_directory: pathlib.Path = (
+                settings.working_path / "versions" / settings.current_version / f"{settings.current_version}-natives"
+        )
         self.launcher_name: str = "Granite"
         self.launcher_version: str = "114514"
         self.classpath: str = ""
@@ -59,8 +61,11 @@ class MinecraftLaunch:
         self.auth_uuid: str = settings.auth_uuid
         self.auth_access_token: str = settings.auth_access_token
         self.user_type: str = settings.user_type
-        self.quick_play_path: pathlib.Path = settings.quick_play_path if settings.quick_play_path is not None \
+        self.quick_play_path: pathlib.Path = (
+            settings.quick_play_path
+            if settings.quick_play_path is not None
             else settings.working_path / "quickPlay" / "log.json"
+        )
         self.quick_play_singleplayer: str = settings.quick_play_singleplayer
         self.quick_play_multiplayer: str = settings.quick_play_multiplayer
         self.quick_play_realms: str = settings.quick_play_realms
@@ -105,12 +110,12 @@ class MinecraftLaunch:
             "quickPlayRealms": self.quick_play_realms,
         }
 
-        final_argument: str = \
-            f"{self.task_queue.results['0']} {self.task_queue.results['2']}".replace("${", "{")
-        print(final_argument)
-        final_argument = final_argument.format(**replacements)
+        final_argument: str = f"{self.task_queue.results['0']} {self.task_queue.results['2']}"
+        final_argument = string.Template(final_argument).safe_substitute(replacements)
+
         self.logger.info(f"启动参数解析耗时 {time.time() - start_time:.3f}s")
         self.logger.info(final_argument)
+
         self.final_argument = final_argument
 
         return 0
