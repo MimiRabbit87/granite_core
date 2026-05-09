@@ -200,63 +200,61 @@ class MinecraftLaunch:
     def analyze_libraries(self) -> str:
         self.natives_directory.mkdir(parents=True, exist_ok=True)
         library_path: pathlib.Path = self.working_path / "libraries"
+
         native_libraries: list[pathlib.Path] = []
         libraries: list[str] = []
-        # 1.19-pre1 的更改太大了，基本没法合并成一个逻辑
-        if (datetime.datetime.fromisoformat(self.version_metadata["releaseTime"])
-                >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")):
-            for library in self.version_metadata["libraries"]:
-                current_library_maven: list[str] = library["name"].split(":")
-                current_library_path: pathlib.Path = \
-                    pathlib.Path() / current_library_maven[0].replace(".", "/") / current_library_maven[1] / \
-                    current_library_maven[2] / f"{'-'.join(current_library_maven[1:])}.jar"
+        # 是否 >= 1.19-pre1
+        is_new_style: bool = (
+                datetime.datetime.fromisoformat(self.version_metadata["releaseTime"])
+                >= datetime.datetime.fromisoformat("2022-05-18T13:51:54+00:00")
+        )
 
-                if len(current_library_maven) == 4:
-                    is_eligible: bool = True
-                    for rule in library["rules"]:
-                        if not self._analysis_rules(rule):
-                            is_eligible = False
-                            break
-                    if not is_eligible:
+        for library in self.version_metadata["libraries"]:
+            if "rules" in library:
+                for rule in library["rules"]:
+                    if not self._analysis_rules(rule):
                         continue
-                    native_libraries.append(library_path / current_library_path)
 
-                libraries.append(str(library_path / current_library_path))
-        else:
-            for library in self.version_metadata["libraries"]:
-                current_library_maven: list[str] = library["name"].split(":")
-                current_library_path: pathlib.Path = \
-                    pathlib.Path() / current_library_maven[0].replace(".", "/") / current_library_maven[1] / \
-                    current_library_maven[2] / f"{'-'.join(current_library_maven[1:])}.jar"
+            if "natives" in library:
+                classifier: dict = library["natives"].get(self.system_name)
+                if classifier and "downloads" in library and "classifiers" in library["downloads"]:
+                    classifier_info: dict = library["downloads"]["classifiers"].get(classifier)
+                    if classifier_info:
+                        native_path = library_path / classifier_info["path"]
+                        libraries.append(str(native_path))
+                        # < 1.19-pre1 需要解压，新版本不需要
+                        if not is_new_style:
+                            native_libraries.append(native_path)
+                continue
 
-                if "rules" in library.keys():
-                    is_eligible: bool = True
-                    for rule in library["rules"]:
-                        if not self._analysis_rules(rule):
-                            is_eligible = False
-                            break
-                    if not is_eligible:
-                        continue
-                if "natives" in library.keys():
-                    libraries.append(str(
-                        library_path /
-                        library["downloads"]["classifiers"][library["natives"][self.system_name]]["path"]
-                    ))
-                    native_libraries.append(
-                        library_path /
-                        library["downloads"]["classifiers"][library["natives"][self.system_name]]["path"]
+            # 有 downloads.artifact.path 就用
+            if "downloads" in library and "artifact" in library["downloads"]:
+                artifact_path: str = library["downloads"]["artifact"]["path"]
+                full_path: pathlib.Path = library_path / artifact_path
+            else:
+                # 没就推导
+                parts: list[str] = library["name"].split(":")
+                if len(parts) >= 3:  # 表明了是动态链接库
+                    (group, artifact, version) = (parts[0], parts[1], parts[2])
+                    jar_name: str = f"{artifact}-{version}.jar"
+                    rel_path: pathlib.Path = (
+                            pathlib.Path()
+                            / group.replace('.', '/')
+                            / artifact
+                            / version
+                            / jar_name
                     )
-                if "downloads" in library:
-                    if "artifact" in library["downloads"].keys():
-                        libraries.append(str(library_path / current_library_path))
+                    full_path: pathlib.Path = library_path / rel_path
                 else:
-                    libraries.append(str(library_path / current_library_path))
-
-            self._unzip_native_libraries(native_libraries)
+                    continue
+            libraries.append(str(full_path))
 
         libraries.append(str(self.working_path / "versions" / self.version / f"{self.version}.jar"))
+
+        if not is_new_style and native_libraries:
+            self._unzip_native_libraries(native_libraries)
+
         classpath: str = os.pathsep.join(libraries)
-        classpath = f"\"{classpath}\""
 
         return classpath
 
