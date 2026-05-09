@@ -31,8 +31,8 @@ class Test(unittest.TestCase):
     def test_install(self) -> None:
         settings: granite_core.granite.granite_settings.GraniteSettings = \
             granite_core.granite.granite_settings.GraniteSettings()
-        installer: granite_core.minecraft.minecraft_install.MinecraftInstall = (
-                granite_core.minecraft.minecraft_install.MinecraftInstall(
+        installer: granite_core.minecraft.minecraft_installation.MinecraftInstallation = (
+                granite_core.minecraft.minecraft_installation.MinecraftInstallation(
                 settings,
                 "1.12.2",
                 16,

@@ -27,7 +27,7 @@ from granite_core.concurrency import task_queue
 from granite_core.granite import granite_settings
 
 
-class MinecraftInstall:
+class MinecraftInstallation:
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
