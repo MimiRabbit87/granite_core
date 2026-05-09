@@ -31,8 +31,8 @@ class Test(unittest.TestCase):
     def test_install(self) -> None:
         settings: granite_core.granite.granite_settings.GraniteSettings = \
             granite_core.granite.granite_settings.GraniteSettings()
-        installer: granite_core.minecraft.minecraft_install.MinecraftInstall = (
-                granite_core.minecraft.minecraft_install.MinecraftInstall(
+        installer: granite_core.minecraft.minecraft_installation.MinecraftInstallation = (
+                granite_core.minecraft.minecraft_installation.MinecraftInstallation(
                 settings,
                 "1.12.2",
                 16,
@@ -69,7 +69,7 @@ class Test(unittest.TestCase):
         # login: granite_core.account_login.AccountLogin = \
         #     granite_core.account_login.AccountLogin(settings, self.thread_pool)
         # login.login()
-        # settings.auth_access_token = login.task_queue.results['4']['Token']
+        # settings.auth_access_token = login.task_queue.results["4"]["access_token"]
         launcher: granite_core.minecraft.minecraft_launch.MinecraftLaunch = \
             granite_core.minecraft.minecraft_launch.MinecraftLaunch(
                 settings,
@@ -86,7 +86,7 @@ class Test(unittest.TestCase):
         login: granite_core.account.account_login.AccountLogin = \
             granite_core.account.account_login.AccountLogin(settings, self.thread_pool)
         if login.login():
-            self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['Token'][:4]}……")
+            self.logger.info(f"登录成功，访问令牌：{login.task_queue.results['4']['access_token'][:4]}……")
         else:
             self.logger.info("登录失败")
 
@@ -141,7 +141,8 @@ class Test(unittest.TestCase):
 
             java_manager: granite_core.java.java_management.JavaManagement = \
                 granite_core.java.java_management.JavaManagement(settings, self.thread_pool)
-            minecraft_instance_manager: granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
+            minecraft_instance_manager: \
+                granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement = \
                 granite_core.minecraft.minecraft_instance_management.MinecraftInstanceManagement()
 
             login: granite_core.account.account_login.AccountLogin = \
