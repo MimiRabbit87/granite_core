@@ -28,6 +28,14 @@ from granite_core.granite import granite_settings
 
 
 class MinecraftInstallation:
+    USER_AGENT: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
+        "Chrome/91.0.4472.124 Safari/537.36"
+    )
+    CHUNK_SIZE: int = 4 * 1024 * 1024
+    MAX_RETRIES: int = 3
+
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
@@ -56,7 +64,7 @@ class MinecraftInstallation:
         # 连接池啊这个是
         self.session = requests.Session()
         retry_strategy = urllib3.util.Retry(
-            total=3,
+            total=self.MAX_RETRIES,
             backoff_factor=0.5,
             status_forcelist=[403, 429, 500, 502, 503, 504, 567],
         )
@@ -123,25 +131,7 @@ class MinecraftInstallation:
         return 0
 
     def download_game_main_file(self) -> int:
-        if not self.version_metadata:
-            self.logger.info(f"未检测到游戏元数据，{self.version_metadata}")
-            self.install_running_flag = False
-            return -1
-
-        if pathlib.Path.exists(self.install_main_path / "versions"
-                               / self.install_version / f"{self.install_version}.jar"):
-                if (self._get_file_sha1(self.install_main_path / "versions"
-                                        / self.install_version / f"{self.install_version}.jar")
-                        == self.version_metadata["downloads"]["client"]["sha1"]):
-                    self.logger.info("已存在主文件")
-                    return 0
-
-        file_chunked: list[tuple[int, int]] = self._compute_download_file_chunked(
-            self.version_metadata["downloads"]["client"]["url"] if self.download_source == "Mojang"
-            else self.version_metadata["downloads"]["client"]["url"]
-            .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # noqa
-            4194304
-        )
+        file_chunked: list[tuple[int, int]] = self._preprocess_game_main_file_downloading()
         if not file_chunked:
             return -1
 
@@ -161,7 +151,7 @@ class MinecraftInstallation:
                     f"{str(i)}.tmp",  # 下载块文件名
                     file_chunked[i][0], file_chunked[i][1]  # 下载块起始
                 ),  # 好长一条参数
-                "max_retries": 5,
+                "max_retries": self.MAX_RETRIES,
                 "priority": 11
             })
             time.sleep(1)  # 给点延迟防止太多 429 影响效率
@@ -209,9 +199,7 @@ class MinecraftInstallation:
 
             try:
                 headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                  "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
-                                  "Chrome/91.0.4472.124 Safari/537.36"
+                    "User-Agent": self.USER_AGENT
                 }
                 asset_index: dict = requests.request(
                     "GET",
@@ -231,7 +219,7 @@ class MinecraftInstallation:
                 self.logger.info(f"下载资源索引文件 {self.version_metadata['assetIndex']['id']} 成功")
 
             except Exception as e:
-                logging.error(f"下载资源索引文件失败: {e}")
+                self.logger.error(f"下载资源索引文件失败: {e}")
 
             break
 
@@ -252,49 +240,7 @@ class MinecraftInstallation:
         progress_updater.start()
 
         for i in range(len(asset_index["objects"])):
-            if (
-                    pathlib.Path.exists(self.install_main_path / "assets" / "objects"
-                                        / assets_info[i][1]["hash"][:2] / assets_info[i][1]["hash"])
-                and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0])
-                and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "pre-1.6" / assets_info[i][0])
-            ):
-                if (
-                        self._get_file_sha1(self.install_main_path / "assets" / "objects"
-                                            / assets_info[i][1]["hash"][:2] / assets_info[i][1]["hash"])
-                        == assets_info[i][1]["hash"]
-                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual"
-                                            / "legacy" / assets_info[i][0]) == assets_info[i][1]["hash"]
-                    and self._get_file_sha1(self.install_main_path / "assets" / "virtual"
-                                            / "pre-1.6" / assets_info[i][0]) == assets_info[i][1]["hash"]
-                ):
-                    self.installed_assets += 1
-                    continue
-
-            self.install_queue.submit({
-                "id": f"asset-downloading-worker-{i}",
-                "description": f"下载游戏资源文件的 ({assets_info[i][0]}, {assets_info[i][1]['hash']})",
-                "function": self._regular_download,
-                "args": (
-                    f"asset-downloading-worker-{i}",  # 给个 id，debug 用
-                    f"{self.minecraft_assets_path[self.download_source]}/"
-                    f"{assets_info[i][1]['hash'][:2]}/{assets_info[i][1]['hash']}",  # 远端地址
-                    [
-                        self.install_main_path / "assets" / "objects" / assets_info[i][1]["hash"][:2],
-                        (self.install_main_path / "assets" / "virtual" / "legacy" / assets_info[i][0]).parent,
-                        (self.install_main_path / "assets" / "virtual" / "pre-1.6" / assets_info[i][0]).parent
-                    ],  # 下载资源文件路径
-                    [
-                        assets_info[i][1]["hash"],
-                        pathlib.Path(assets_info[i][0]).name,
-                        pathlib.Path(assets_info[i][0]).name
-                    ],  # 下载资源文件名
-                    assets_info[i][1]["hash"]  # 散列值
-                ),  # 又是好长一条参数
-                "callback": self._asset_downloading_callback,
-                "callback_args": (f"asset-downloading-worker-{i}", assets_info[i]),
-                "max_retries": 3,
-                "priority": 11
-            })
+            self._process_game_asset(assets_info[i], i)
             # time.sleep(0.01)  # 休息一下  # 啊，这里是后期的米米兔，这玩意好像没用，到时候再添加防止 429 的策略吧
             assets_range += 1
             if assets_range >= 100:
@@ -322,74 +268,10 @@ class MinecraftInstallation:
 
         for i in range(len(self.version_metadata["libraries"])):
             if "classifiers" in self.version_metadata["libraries"][i]["downloads"]:
-                for classifier in self.version_metadata["libraries"][i]["downloads"]["classifiers"].values():
-                    if pathlib.Path.exists(self.install_main_path / "libraries" / classifier["path"]):
-                        if (self._get_file_sha1(self.install_main_path / "libraries" / classifier["path"])
-                                == classifier["sha1"]):
-                            self.installed_libraries += 1
-                            continue
-
-                    self.install_queue.submit({
-                        "id": f"library-downloading-worker-{i}",
-                        "description": f"下载游戏支持库 ({self.version_metadata['libraries'][i]['name']}) 的"
-                                       f"动态链接库文件 ({pathlib.Path(classifier['path']).name})",
-                        "function": self._regular_download,
-                        "args": (
-                            f"library-downloading-worker-{i}",  # 给个 id，debug 用
-                            # 远端地址
-                            classifier["url"] if self.download_source == "Mojang"
-                            else classifier["url"].replace("https://libraries.minecraft.net",
-                                                           "https://bmclapi2.bangbang93.com/maven"),
-                            # 下载支持库文件路径
-                            [(self.install_main_path / "libraries" / classifier["path"]).parent],
-                            # 下载支持库文件名
-                            [pathlib.Path(classifier["path"]).name],
-                            # 散列值
-                            classifier["sha1"]
-                        ),  # 仍然是好长一条参数
-                        "callback": self._library_downloading_callback,
-                        "callback_args": (
-                            f"library-downloading-worker-{i}",
-                            {**classifier, "name": self.version_metadata["libraries"][i]["name"]},
-                            True
-                        ),
-                        "max_retries": 3,
-                        "priority": 11
-                    })
-                    libraries_range += len(classifier)
+                libraries_range += self._download_classified_libraries(i)
             else:
-                if pathlib.Path.exists(self.install_main_path / "libraries"
-                                       / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]):
-                    if (self._get_file_sha1(self.install_main_path / "libraries"
-                                            / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"])
-                            == self.version_metadata["libraries"][i]["downloads"]["artifact"]["sha1"]):
-                        self.installed_libraries += 1
-                        continue
-
-                self.install_queue.submit({
-                    "id": f"library-downloading-worker-{i}",
-                    "description": f"下载游戏支持库文件的 ({self.version_metadata['libraries'][i]['name']})",
-                    "function": self._regular_download,
-                    "args": (
-                        f"library-downloading-worker-{i}",  # 给个 id，debug 用
-                        # 远端地址
-                        self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"]
-                        if self.download_source == "Mojang"
-                        else self.version_metadata["libraries"][i]["downloads"]["artifact"]["url"]
-                        .replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
-                        # 下载支持库文件路径
-                        [(self.install_main_path / "libraries"
-                          / self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).parent],
-                        # 下载支持库文件名
-                        [pathlib.Path(self.version_metadata["libraries"][i]["downloads"]["artifact"]["path"]).name],
-                        # 散列值
-                        self.version_metadata["libraries"][i]["downloads"]["artifact"]["sha1"]
-                    ),  # 仍然是好长一条参数
-                    "callback": self._library_downloading_callback,
-                    "callback_args": (f"library-downloading-worker-{i}", self.version_metadata["libraries"][i]),
-                    "max_retries": 3,
-                    "priority": 11
-                })
+                if self._download_normal_library(i):
+                    continue
                 libraries_range += 1
 
             if libraries_range >= 100:
@@ -398,6 +280,180 @@ class MinecraftInstallation:
                 libraries_range -= 100
 
         return 0
+
+    def _preprocess_game_main_file_downloading(self) -> list[tuple[int, int]]:
+        if not self.version_metadata:
+            self.logger.info(f"未检测到游戏元数据，{self.version_metadata}")
+            self.install_running_flag = False
+            return []
+
+        if pathlib.Path.exists(self.install_main_path / "versions"
+                               / self.install_version / f"{self.install_version}.jar"):
+                if (self._get_file_sha1(self.install_main_path / "versions"
+                                        / self.install_version / f"{self.install_version}.jar")
+                        == self.version_metadata["downloads"]["client"]["sha1"]):
+                    self.logger.info("已存在主文件")
+                    return []
+
+        file_chunked: list[tuple[int, int]] = self._compute_download_file_chunked(
+            self.version_metadata["downloads"]["client"]["url"] if self.download_source == "Mojang"
+            else self.version_metadata["downloads"]["client"]["url"]
+            .replace("piston-meta.mojang.com", "bmclapi2.bangbang93.com"),  # noqa
+            self.CHUNK_SIZE
+        )
+        if not file_chunked:
+            return []
+
+        return file_chunked
+
+    def _download_classified_libraries(self, index: int) -> int:
+        classifiers_length: int = 0
+        for classifier in self.version_metadata["libraries"][index]["downloads"]["classifiers"].values():
+            if pathlib.Path.exists(self.install_main_path / "libraries" / classifier["path"]):
+                if (self._get_file_sha1(self.install_main_path / "libraries" / classifier["path"])
+                        == classifier["sha1"]):
+                    self.installed_libraries += 1
+                    continue
+
+            self.install_queue.submit(
+                {
+                    "id": f"library-downloading-worker-{index}",
+                    "description": f"下载游戏支持库 ({self.version_metadata['libraries'][index]['name']}) 的"
+                                   f"动态链接库文件 ({pathlib.Path(classifier['path']).name})",
+                    "function": self._regular_download,
+                    "args": (
+                        f"library-downloading-worker-{index}",  # 给个 id，debug 用
+                        # 远端地址
+                        classifier["url"] if self.download_source == "Mojang"
+                        else classifier["url"].replace(
+                            "https://libraries.minecraft.net",
+                            "https://bmclapi2.bangbang93.com/maven"
+                            ),
+                        # 下载支持库文件路径
+                        [(self.install_main_path / "libraries" / classifier["path"]).parent],
+                        # 下载支持库文件名
+                        [pathlib.Path(classifier["path"]).name],
+                        # 散列值
+                        classifier["sha1"]
+                    ),  # 仍然是好长一条参数
+                    "callback": self._library_downloading_callback,
+                    "callback_args": (
+                        f"library-downloading-worker-{index}",
+                        {**classifier, "name": self.version_metadata["libraries"][index]["name"]},
+                        True
+                    ),
+                    "max_retries": self.MAX_RETRIES,
+                    "priority": 11
+                }
+            )
+
+            classifiers_length += len(classifier)
+
+        return classifiers_length
+
+    def _download_normal_library(self, index: int) -> bool:
+        """:return: if the library has already existed or not"""
+
+        if pathlib.Path.exists(
+                self.install_main_path / "libraries"
+                / self.version_metadata["libraries"][index]["downloads"]["artifact"]["path"]
+                ):
+            if (self._get_file_sha1(
+                    self.install_main_path / "libraries"
+                    / self.version_metadata["libraries"][index]["downloads"]["artifact"]["path"]
+                    )
+                    == self.version_metadata["libraries"][index]["downloads"]["artifact"]["sha1"]):
+                self.installed_libraries += 1
+                return True
+
+        self.install_queue.submit(
+            {
+                "id": f"library-downloading-worker-{index}",
+                "description": f"下载游戏支持库文件的 ({self.version_metadata['libraries'][index]['name']})",
+                "function": self._regular_download,
+                "args": (
+                    f"library-downloading-worker-{index}",  # 给个 id，debug 用
+                    # 远端地址
+                    self.version_metadata["libraries"][index]["downloads"]["artifact"]["url"]
+                    if self.download_source == "Mojang"
+                    else self.version_metadata["libraries"][index]["downloads"]["artifact"]["url"]
+                    .replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),
+                    # 下载支持库文件路径
+                    [
+                        (self.install_main_path / "libraries"
+                         / self.version_metadata["libraries"][index]["downloads"]["artifact"]["path"]).parent
+                    ],
+                    # 下载支持库文件名
+                    [pathlib.Path(self.version_metadata["libraries"][index]["downloads"]["artifact"]["path"]).name],
+                    # 散列值
+                    self.version_metadata["libraries"][index]["downloads"]["artifact"]["sha1"]
+                ),  # 仍然是好长一条参数
+                "callback": self._library_downloading_callback,
+                "callback_args": (f"library-downloading-worker-{index}", self.version_metadata["libraries"][index]),
+                "max_retries": self.MAX_RETRIES,
+                "priority": 11
+            }
+        )
+
+        return False
+
+    def _process_game_asset(self, asset: list, index: int) -> bool:
+        """:return: if the asset has already existed or not"""
+        if (
+                pathlib.Path.exists(
+                    self.install_main_path / "assets" / "objects"
+                    / asset[1]["hash"][:2] / asset[1]["hash"]
+                    )
+                and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "legacy" / asset[0])
+                and pathlib.Path.exists(self.install_main_path / "assets" / "virtual" / "pre-1.6" / asset[0])
+        ):
+            if (
+                    self._get_file_sha1(
+                        self.install_main_path / "assets" / "objects"
+                        / asset[1]["hash"][:2] / asset[1]["hash"]
+                        )
+                    == asset[1]["hash"]
+                    and self._get_file_sha1(
+                self.install_main_path / "assets" / "virtual"
+                / "legacy" / asset[0]
+                ) == asset[1]["hash"]
+                    and self._get_file_sha1(
+                self.install_main_path / "assets" / "virtual"
+                / "pre-1.6" / asset[0]
+                ) == asset[1]["hash"]
+            ):
+                self.installed_assets += 1
+                return True
+
+        self.install_queue.submit(
+            {
+                "id": f"asset-downloading-worker-{index}",
+                "description": f"下载游戏资源文件的 ({asset[0]}, {asset[1]['hash']})",
+                "function": self._regular_download,
+                "args": (
+                    f"asset-downloading-worker-{index}",  # 给个 id，debug 用
+                    f"{self.minecraft_assets_path[self.download_source]}/"
+                    f"{asset[1]['hash'][:2]}/{asset[1]['hash']}",  # 远端地址
+                    [
+                        self.install_main_path / "assets" / "objects" / asset[1]["hash"][:2],
+                        (self.install_main_path / "assets" / "virtual" / "legacy" / asset[0]).parent,
+                        (self.install_main_path / "assets" / "virtual" / "pre-1.6" / asset[0]).parent
+                    ],  # 下载资源文件路径
+                    [
+                        asset[1]["hash"],
+                        pathlib.Path(asset[0]).name,
+                        pathlib.Path(asset[0]).name
+                    ],  # 下载资源文件名
+                    asset[1]["hash"]  # 散列值
+                ),  # 又是好长一条参数
+                "callback": self._asset_downloading_callback,
+                "callback_args": (f"asset-downloading-worker-{index}", asset),
+                "max_retries": self.MAX_RETRIES,
+                "priority": 11
+            }
+        )
+
+        return False
 
     def _retry_download_game_resources(self, task: dict[str, ...]) -> int:
         def retry() -> int:
@@ -465,9 +521,7 @@ class MinecraftInstallation:
     ) -> list:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
-                              "Chrome/91.0.4472.124 Safari/537.36"
+                "User-Agent": self.USER_AGENT
             }
             response: requests.Response = requests.head(url, headers=headers, allow_redirects=True)
 
@@ -476,8 +530,8 @@ class MinecraftInstallation:
                 return []
 
             file_size: int = int(response.headers.get("Content-Length", 0))
-        except Exception as e:
-            logging.error(f"[Install]:\n{e}")
+        except Exception:  # noqa
+            self.logger.exception("在分块下载计算时发生了未预料的异常：")
             return []
 
         chunks: list = []
@@ -485,16 +539,14 @@ class MinecraftInstallation:
             end = min(start + chunk_size - 1, file_size - 1)
             chunks.append((start, end))
 
-        logging.debug(chunks)
+        self.logger.debug(chunks)
         return chunks
 
     def _download_chunk(self, worker_id: str, url: str, chunk_path: pathlib.Path, chunk_file: str,
                         start: int, end: int) -> bool:
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
-                              "Chrome/91.0.4472.124 Safari/537.36",
+                "User-Agent": self.USER_AGENT,
                 "Range": f"bytes={start}-{end}"
             }
 
@@ -510,7 +562,7 @@ class MinecraftInstallation:
 
             return True
         except Exception as e:
-            logging.error(f"下载块失败 ({start}-{end})，于 {worker_id}: {e}")
+            self.logger.error(f"下载块失败 ({start}-{end})，于 {worker_id}: {e}")
             return False
 
     def _regular_download(
@@ -525,9 +577,7 @@ class MinecraftInstallation:
             return False
         try:
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                              "AppleWebKit/537.36 (KHTML, like Gecko) "  # noqa
-                              "Chrome/91.0.4472.124 Safari/537.36"
+                "User-Agent": self.USER_AGENT
             }
 
             response = self.session.get(url, headers=headers, timeout=30, proxies={}, verify=False)
@@ -546,7 +596,7 @@ class MinecraftInstallation:
 
             return True
         except Exception as e:
-            logging.error(f"下载文件 {url} 失败，于 {worker_id}: {e}")
+            self.logger.error(f"下载文件 {url} 失败，于 {worker_id}: {e}")
             return False
 
     def _wait_main_file_downloading_completion(self, chunks: int) -> bool:
@@ -597,7 +647,7 @@ class MinecraftInstallation:
                 ),  # 又是好长一条参数
                 "callback": self._asset_downloading_callback,
                 "callback_args": (f"asset-downloading-worker-{self.retried_assets}", asset_data),
-                "max_retries": 3,
+                "max_retries": self.MAX_RETRIES,
                 "priority": 12
             })
             self.retried_assets += 1
@@ -619,8 +669,14 @@ class MinecraftInstallation:
                 self.failed_libraries += 1
                 return -1
 
-            if is_classifier:
-                self._retry_download_game_resources({
+            self._retry_download_library(is_classifier, library_data)
+            self.retried_libraries += 1
+        return 0
+
+    def _retry_download_library(self, is_classifier: bool, library_data: dict) -> None:
+        if is_classifier:
+            self._retry_download_game_resources(
+                {
                     "id": f"library-downloading-worker-retry-{self.retried_libraries}",
                     "description": f"重试下载游戏支持库 ({library_data['name']}) 的"
                                    f"动态链接库文件 ({pathlib.Path(library_data['path']).name})",
@@ -629,8 +685,10 @@ class MinecraftInstallation:
                         f"library-downloading-worker-{self.retried_libraries}",  # 给个 id，debug 用
                         # 远端地址
                         library_data["url"] if self.download_source == "BMCLAPI"  # noqa
-                        else library_data["url"].replace("https://libraries.minecraft.net",
-                                                         "https://bmclapi2.bangbang93.com/maven"),
+                        else library_data["url"].replace(
+                            "https://libraries.minecraft.net",
+                            "https://bmclapi2.bangbang93.com/maven"
+                            ),
                         # 下载支持库文件路径
                         [(self.install_main_path / "libraries" / library_data["path"]).parent],
                         # 下载支持库文件名
@@ -639,11 +697,13 @@ class MinecraftInstallation:
                     ),  # 好长一参数
                     "callback": self._library_downloading_callback,
                     "callback_args": (f"library-downloading-worker-retry-{self.retried_libraries}",),
-                    "max_retries": 3,
+                    "max_retries": self.MAX_RETRIES,
                     "priority": 12
-                })
-            else:
-                self._retry_download_game_resources({
+                }
+            )
+        else:
+            self._retry_download_game_resources(
+                {
                     "id": f"library-downloading-worker-retry-{self.retried_libraries}",
                     "description": f"重试下载游戏支持库文件的 ({library_data['name']})",
                     "function": self._regular_download,
@@ -652,18 +712,19 @@ class MinecraftInstallation:
                         library_data["downloads"]["artifact"]["url"] if self.download_source == "BMCLAPI"  # noqa
                         else library_data["downloads"]["artifact"]["url"]
                         .replace("https://libraries.minecraft.net", "https://bmclapi2.bangbang93.com/maven"),  # 远端地址
-                        [(self.install_main_path / "libraries"
-                          / library_data["downloads"]["artifact"]["path"]).parent],  # 下载资源文件路径
+                        [
+                            (self.install_main_path / "libraries"
+                             / library_data["downloads"]["artifact"]["path"]).parent
+                        ],  # 下载资源文件路径
                         [pathlib.Path(library_data["downloads"]["artifact"]["path"]).name],  # 下载资源文件名
                         library_data["downloads"]["artifact"]["sha1"]  # 散列值
                     ),  # 好长一参数
                     "callback": self._library_downloading_callback,
                     "callback_args": (f"library-downloading-worker-retry-{self.retried_libraries}",),
-                    "max_retries": 3,
+                    "max_retries": self.MAX_RETRIES,
                     "priority": 12
-                })
-            self.retried_libraries += 1
-        return 0
+                }
+            )
 
     def _get_libraries_progress(self) -> int:
         return self.installed_libraries + self.failed_libraries
