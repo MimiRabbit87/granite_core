@@ -252,7 +252,7 @@ class MinecraftLaunch:
                 else:
                     libraries.append(str(library_path / current_library_path))
 
-        self._unzip_native_libraries(native_libraries)
+            self._unzip_native_libraries(native_libraries)
 
         libraries.append(str(self.working_path / "versions" / self.version / f"{self.version}.jar"))
         classpath: str = os.pathsep.join(libraries)
