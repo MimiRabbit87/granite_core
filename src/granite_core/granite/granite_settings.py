@@ -61,7 +61,7 @@ class GraniteSettings:
     quick_play_multiplayer: str | None = None
     quick_play_realms: str | None = None
 
-    def post_init(self):
+    def __post_init__(self):
         self.working_path.mkdir(parents=True, exist_ok=True)
         self.temp_path.mkdir(parents=True, exist_ok=True)
 

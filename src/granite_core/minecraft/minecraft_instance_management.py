@@ -58,7 +58,12 @@ class MinecraftInstanceManagement:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return False
 
-    def launch_game(self, java_path: pathlib.Path, launch_argument: str) -> subprocess.Popen:
+    def launch_game(
+            self,
+            java_path: pathlib.Path,
+            launch_argument: str,
+            current_working_directory: pathlib.Path
+    ) -> subprocess.Popen:
         instance: subprocess.Popen = subprocess.Popen(
             f"{java_path} {launch_argument}",
             stdout=subprocess.PIPE,
@@ -66,6 +71,7 @@ class MinecraftInstanceManagement:
             creationflags=subprocess.CREATE_NO_WINDOW,
             text=True,
             encoding="utf-8",
+            cwd=current_working_directory
         )
         self.instance_list.append(instance)
 

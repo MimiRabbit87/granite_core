@@ -26,7 +26,7 @@ from granite_core.concurrency import task_queue
 from granite_core.granite import granite_settings
 
 
-class MinecraftLaunch:
+class MinecraftCommandlineGeneration:
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
