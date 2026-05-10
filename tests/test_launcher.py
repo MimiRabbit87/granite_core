@@ -21,13 +21,16 @@ import granite_core  # 当当前工作目录为项目根目录时，运行 pip i
 
 
 class Test(unittest.TestCase):
+    logger: logging.Logger
+    thread_pool: concurrent.futures.ThreadPoolExecutor
+
     logging.basicConfig(
         level=logging.INFO, format="[%(asctime)s][%(levelname)s][%(name)s]: %(message)s", encoding="utf-8"
     )
 
     def setUp(self) -> None:
-        self.logger: logging.Logger = logging.getLogger("Test")
-        self.thread_pool: concurrent.futures.ThreadPoolExecutor = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+        self.logger = logging.getLogger("Test")
+        self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=16)
 
     @unittest.skip
     def test_install(self) -> None:

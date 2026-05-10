@@ -18,10 +18,14 @@ import psutil
 
 
 class MinecraftInstanceManagement:
+    logger: logging.Logger
+    instance_list: list[subprocess.Popen]
+    external_instances_list: list[psutil.Process]
+
     def __init__(self) -> None:
-        self.logger: logging.Logger = logging.getLogger("MinecraftInstanceManagement")
-        self.instance_list: list[subprocess.Popen] = []  # 由 Granite Core 直接启动的 Minecraft 实例 Popen 对象
-        self.external_instances_list: list[psutil.Process] = []  # 由外部启动的疑似 Minecraft 实例进程 Process 对象
+        self.logger = logging.getLogger("MinecraftInstanceManagement")
+        self.instance_list = []  # 由 Granite Core 直接启动的 Minecraft 实例 Popen 对象
+        self.external_instances_list = []  # 由外部启动的疑似 Minecraft 实例进程 Process 对象
 
     def search_for_game_instances(self) -> None:
         self.external_instances_list = []

@@ -19,6 +19,8 @@ import keyring.errors
 class TokenManagement:
     SERVICE_NAME: str = "Granite Core"
 
+    logger: logging.Logger
+
     def __init__(self) -> None:
         self.logger = logging.getLogger("TokenManagement")
 
