@@ -1,5 +1,5 @@
 """
-    Main: the main file of unittest.
+    Test Launcher: the main file of unittest.
     Copyright (C) 2026 MimiRabbit
 
     This program is free software: you can redistribute it and/or modify
