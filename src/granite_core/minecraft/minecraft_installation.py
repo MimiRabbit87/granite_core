@@ -36,6 +36,36 @@ class MinecraftInstallation:
     CHUNK_SIZE: int = 4 * 1024 * 1024
     MAX_RETRIES: int = 3
 
+    MINECRAFT_VERSION_MANIFEST_PATH: dict[str, str] = {
+        "Mojang": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
+        "BMCLAPI": "https://bmclapi2.bangbang93.com/mc/game/version_manifest.json"  # noqa
+    }
+    MINECRAFT_ASSETS_PATH: dict[str, str] = {
+        "Mojang": "https://resources.download.minecraft.net",
+        "BMCLAPI": "https://bmclapi2.bangbang93.com/assets"  # noqa
+    }
+
+    logger: logging.Logger
+    install_running_flag: bool
+    install_version: str
+    install_main_path: pathlib.Path
+    download_source: str
+    temp_path: pathlib.Path
+
+    session: requests.Session
+
+    install_queue: task_queue.TaskQueue
+    version_manifest: dict
+    version_metadata: dict
+    total_assets: int
+    installed_assets: int
+    failed_assets: int
+    retried_assets: int
+    total_libraries: int
+    installed_libraries: int
+    failed_libraries: int
+    retried_libraries: int
+
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
@@ -45,47 +75,39 @@ class MinecraftInstallation:
     ) -> None:
         # 把 SSL 验证禁了，下载文件用不着，拖慢速度不说，报错率直线上涨
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        self.logger: logging.Logger = logging.getLogger("Install")
-        self.install_running_flag: bool = True
-        self.install_version: str = install_version
-        self.install_main_path: pathlib.Path = settings.working_path
-        self.download_source: str = settings.download_source
-        self.temp_path: pathlib.Path = settings.temp_path
-        self.minecraft_version_manifest_path: dict[str, str] = {
-            "Mojang": "https://launchermeta.mojang.com/mc/game/version_manifest.json",
-            "BMCLAPI": "https://bmclapi2.bangbang93.com/mc/game/version_manifest.json"  # noqa
-        }
-        self.minecraft_assets_path: dict[str, str] = {
-            "Mojang": "https://resources.download.minecraft.net",
-            "BMCLAPI": "https://bmclapi2.bangbang93.com/assets"  # noqa
-        }
+        self.logger = logging.getLogger("Install")
+        self.install_running_flag = True
+        self.install_version = install_version
+        self.install_main_path = settings.working_path
+        self.download_source = settings.download_source
+        self.temp_path = settings.temp_path
 
         # 下载中使用
         # 连接池啊这个是
         self.session = requests.Session()
-        retry_strategy = urllib3.util.Retry(
+        retry_strategy: urllib3.util.Retry = urllib3.util.Retry(
             total=self.MAX_RETRIES,
             backoff_factor=0.5,
             status_forcelist=[403, 429, 500, 502, 503, 504, 567],
         )
-        adapter = requests.adapters.HTTPAdapter(
+        adapter: requests.adapters.HTTPAdapter = requests.adapters.HTTPAdapter(
             pool_connections=max_workers,  # 连接池大小
             pool_maxsize=max_workers,
             max_retries=retry_strategy
         )
         self.session.mount("https://", adapter)
 
-        self.install_queue: task_queue.TaskQueue = task_queue.TaskQueue(max_workers, thread_pool_)
-        self.version_manifest: dict = {}
-        self.version_metadata: dict = {}
-        self.total_assets: int = 0
-        self.installed_assets: int = 0
-        self.failed_assets: int = 0
-        self.retried_assets: int = 0
-        self.total_libraries: int = 0
-        self.installed_libraries: int = 0
-        self.failed_libraries: int = 0
-        self.retried_libraries: int = 0
+        self.install_queue = task_queue.TaskQueue(max_workers, thread_pool_)
+        self.version_manifest = {}
+        self.version_metadata = {}
+        self.total_assets = 0
+        self.installed_assets = 0
+        self.failed_assets = 0
+        self.retried_assets = 0
+        self.total_libraries = 0
+        self.installed_libraries = 0
+        self.failed_libraries = 0
+        self.retried_libraries = 0
 
     def install(self) -> int:
         start_time: float = time.time()
@@ -102,7 +124,7 @@ class MinecraftInstallation:
 
     def download_manifest(self) -> int:
         manifest: dict = json.loads(
-            requests.request("GET", self.minecraft_version_manifest_path[self.download_source]).text)
+            requests.request("GET", self.MINECRAFT_VERSION_MANIFEST_PATH[self.download_source]).text)
         self.version_manifest = manifest
 
         return 0
@@ -432,7 +454,7 @@ class MinecraftInstallation:
                 "function": self._regular_download,
                 "args": (
                     f"asset-downloading-worker-{index}",  # 给个 id，debug 用
-                    f"{self.minecraft_assets_path[self.download_source]}/"
+                    f"{self.MINECRAFT_ASSETS_PATH[self.download_source]}/"
                     f"{asset[1]['hash'][:2]}/{asset[1]['hash']}",  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / asset[1]["hash"][:2],
@@ -631,7 +653,7 @@ class MinecraftInstallation:
                 "function": self._regular_download,
                 "args": (
                     f"asset-downloading-worker-{self.retried_assets}",  # 给个 id，debug 用
-                    f"{self.minecraft_assets_path[self.download_source]}/"
+                    f"{self.MINECRAFT_ASSETS_PATH[self.download_source]}/"
                     f"{asset_data[1]['hash'][:2]}/{asset_data[1]['hash']}",  # 远端地址
                     [
                         self.install_main_path / "assets" / "objects" / asset_data[1]["hash"][:2],

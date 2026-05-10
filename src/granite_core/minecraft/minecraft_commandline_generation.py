@@ -27,51 +27,86 @@ from granite_core.granite import granite_settings
 
 
 class MinecraftCommandlineGeneration:
+    logger: logging.Logger
+    task_queue: task_queue.TaskQueue
+
+    natives_directory: pathlib.Path
+    launcher_name: str
+    launcher_version: str
+    classpath: str
+
+    temp_path: pathlib.Path
+    system_name: str
+    system_version: str
+    system_architecture: str
+    working_path: pathlib.Path
+    version: str
+    jvm_argument_head: str
+    is_demo_user: bool
+    has_custom_resolution: bool
+    has_quick_plays_support: bool
+    is_quick_play_singleplayer: bool
+    is_quick_play_multiplayer: bool
+    is_quick_play_realms: bool
+    maximum_heap_size: int
+    initial_heap_size: int
+    auth_player_name: str
+    auth_uuid: str
+    auth_access_token: str
+    user_type: str
+    quick_play_path: pathlib.Path
+    quick_play_singleplayer: str
+    quick_play_multiplayer: str
+    quick_play_realms: str
+
+    version_metadata: dict
+    final_argument: str
+
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
             thread_pool_: concurrent.futures.ThreadPoolExecutor
     ) -> None:
-        self.logger: logging.Logger = logging.getLogger("Launch")
-        self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(3, thread_pool_)
+        self.logger = logging.getLogger("Launch")
+        self.task_queue = task_queue.TaskQueue(3, thread_pool_)
 
-        self.natives_directory: pathlib.Path = (
+        self.natives_directory = (
                 settings.working_path / "versions" / settings.current_version / f"{settings.current_version}-natives"
         )
-        self.launcher_name: str = "Granite"
-        self.launcher_version: str = "114514"
-        self.classpath: str = ""
+        self.launcher_name = "Granite"
+        self.launcher_version = "114514"
+        self.classpath = ""
 
-        self.temp_path: pathlib.Path = settings.temp_path
-        self.system_name: str = settings.system_name
-        self.system_version: str = settings.system_version
-        self.system_architecture: str = settings.system_architecture
-        self.working_path: pathlib.Path = settings.working_path
-        self.version: str = settings.current_version
-        self.jvm_argument_head: str = settings.jvm_argument_head
-        self.is_demo_user: bool = settings.is_demo_user
-        self.has_custom_resolution: bool = settings.has_custom_resolution
-        self.has_quick_plays_support: bool = settings.has_quick_plays_support
-        self.is_quick_play_singleplayer: bool = settings.is_quick_play_singleplayer
-        self.is_quick_play_multiplayer: bool = settings.is_quick_play_multiplayer
-        self.is_quick_play_realms: bool = settings.is_quick_play_realms
-        self.maximum_heap_size: int = settings.maximum_heap_size
-        self.initial_heap_size: int = settings.initial_heap_size
-        self.auth_player_name: str = settings.auth_player_name
-        self.auth_uuid: str = settings.auth_uuid
-        self.auth_access_token: str = settings.auth_access_token
-        self.user_type: str = settings.user_type
+        self.temp_path = settings.temp_path
+        self.system_name = settings.system_name
+        self.system_version = settings.system_version
+        self.system_architecture = settings.system_architecture
+        self.working_path = settings.working_path
+        self.version = settings.current_version
+        self.jvm_argument_head = settings.jvm_argument_head
+        self.is_demo_user = settings.is_demo_user
+        self.has_custom_resolution = settings.has_custom_resolution
+        self.has_quick_plays_support = settings.has_quick_plays_support
+        self.is_quick_play_singleplayer = settings.is_quick_play_singleplayer
+        self.is_quick_play_multiplayer = settings.is_quick_play_multiplayer
+        self.is_quick_play_realms = settings.is_quick_play_realms
+        self.maximum_heap_size = settings.maximum_heap_size
+        self.initial_heap_size = settings.initial_heap_size
+        self.auth_player_name = settings.auth_player_name
+        self.auth_uuid = settings.auth_uuid
+        self.auth_access_token = settings.auth_access_token
+        self.user_type = settings.user_type
         self.quick_play_path: pathlib.Path = (
             settings.quick_play_path
             if settings.quick_play_path is not None
             else settings.working_path / "quickPlay" / "log.json"
         )
-        self.quick_play_singleplayer: str = settings.quick_play_singleplayer
-        self.quick_play_multiplayer: str = settings.quick_play_multiplayer
-        self.quick_play_realms: str = settings.quick_play_realms
+        self.quick_play_singleplayer = settings.quick_play_singleplayer
+        self.quick_play_multiplayer = settings.quick_play_multiplayer
+        self.quick_play_realms = settings.quick_play_realms
 
-        self.version_metadata: dict = {}
-        self.final_argument: str = ""
+        self.version_metadata = {}
+        self.final_argument = ""
 
     def generate_launch_argument(self) -> int:
         start_time: float = time.time()

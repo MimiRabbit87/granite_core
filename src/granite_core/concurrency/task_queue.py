@@ -21,18 +21,30 @@ import typing
 
 
 class TaskQueue:
+    max_workers: int
+    __original_tasks: list
+    tasks: list
+    pending_tasks: list
+    task_counter: int
+    runnable_tasks: dict[int, dict]
+    thread_pool: concurrent.futures.ThreadPoolExecutor
+    stop_flag: bool = False
+    idle_threads: list[int]
+    __results: dict[str, typing.Any]
+    condition: threading.Condition
+
     def __init__(self, max_workers: int, thread_pool_: concurrent.futures.ThreadPoolExecutor) -> None:
-        self.max_workers: int = max_workers
-        self.__original_tasks: list = []
-        self.tasks: list = []  # 最小堆，存储 (-priority, task_id, task)
-        self.pending_tasks: list = []  # 也是一堆
-        self.task_counter: int = 0
-        self.runnable_tasks: dict[int, dict] = {}
-        self.thread_pool: concurrent.futures.ThreadPoolExecutor = thread_pool_
-        self.stop_flag: bool = False
-        self.idle_threads: list[int] = list(range(max_workers))
-        self.__results: dict[str, typing.Any] = {}
-        self.condition: threading.Condition = threading.Condition()  # This is a condition
+        self.max_workers = max_workers
+        self.__original_tasks = []
+        self.tasks = []  # 最小堆，存储 (-priority, task_id, task)
+        self.pending_tasks = []  # 也是一堆
+        self.task_counter = 0
+        self.runnable_tasks = {}
+        self.thread_pool = thread_pool_
+        self.stop_flag = False
+        self.idle_threads = list(range(max_workers))
+        self.__results = {}
+        self.condition = threading.Condition()  # This is a condition
 
     def submit(self, task: dict[str, typing.Any]) -> None:
         """

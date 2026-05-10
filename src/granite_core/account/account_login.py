@@ -23,15 +23,20 @@ from granite_core.granite import granite_settings
 
 
 class AccountLogin:
+    logger: logging.Logger
+    running_flag: bool
+    settings: granite_settings.GraniteSettings
+    task_queue: task_queue.TaskQueue
+
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
             thread_pool_: concurrent.futures.ThreadPoolExecutor
     ) -> None:
-        self.logger: logging.Logger = logging.getLogger("Login")
-        self.running_flag: bool = True
-        self.settings: granite_settings.GraniteSettings = settings
-        self.task_queue: task_queue.TaskQueue = task_queue.TaskQueue(4, thread_pool_)
+        self.logger = logging.getLogger("Login")
+        self.running_flag = True
+        self.settings = settings
+        self.task_queue = task_queue.TaskQueue(4, thread_pool_)
 
     def login(self) -> bool:
         self._login_tasks_init()

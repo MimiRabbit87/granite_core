@@ -20,15 +20,20 @@ from granite_core.granite import granite_settings
 
 
 class JavaManagement:
+    logger: logging.Logger
+    settings: granite_settings.GraniteSettings
+    thread_pool: concurrent.futures.ThreadPoolExecutor
+    java_list: dict[pathlib.Path, tuple[int, str]]
+
     def __init__(
             self,
             settings: granite_settings.GraniteSettings,
             thread_pool_: concurrent.futures.ThreadPoolExecutor
     ) -> None:
-        self.logger: logging.Logger = logging.getLogger("JavaManagement")
-        self.settings: granite_settings.GraniteSettings = settings
-        self.thread_pool: concurrent.futures.ThreadPoolExecutor = thread_pool_
-        self.java_list: dict[pathlib.Path, tuple[int, str]] = {}
+        self.logger = logging.getLogger("JavaManagement")
+        self.settings = settings
+        self.thread_pool = thread_pool_
+        self.java_list = {}
 
     def search_for_java_from_environment_variable(self) -> list[pathlib.Path]:
         java_path: list[pathlib.Path] = []
